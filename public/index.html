@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>curto · short links</title>
+  <meta name="description" content="Short links that tell you where the clicks came from.">
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <header class="bar">
+    <div class="wrap bar-row">
+      <a class="wordmark" href="/">curto</a>
+      <span class="tagline">short links that tell you where the clicks came from</span>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form class="shorten" id="shorten" novalidate>
+      <label class="sr-only" for="url">Long link</label>
+      <div class="field-row">
+        <input id="url" name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+               placeholder="Paste a long link, like example.com/a/really/long/page" required>
+        <button type="submit" class="go">Shorten</button>
+      </div>
+      <div class="alias-row">
+        <label for="alias">Custom name <span class="muted">(optional)</span></label>
+        <span class="alias-input"><span class="prefix" id="prefix"></span><input id="alias" name="alias" maxlength="32" autocomplete="off" spellcheck="false" placeholder="black-friday"></span>
+      </div>
+      <p class="error" id="error" role="alert" hidden></p>
+    </form>
+
+    <section class="result" id="result" hidden aria-live="polite">
+      <p class="label">Your short link</p>
+      <div class="result-row">
+        <a class="short" id="result-link" target="_blank" rel="noopener"></a>
+        <button type="button" class="ghost" id="copy">Copy</button>
+      </div>
+      <p class="dest" id="result-dest"></p>
+    </section>
+
+    <section class="links" id="links-section" hidden>
+      <div class="section-head">
+        <h2>Your links</h2>
+        <span class="muted">kept in this browser</span>
+      </div>
+      <table class="links-table">
+        <thead>
+          <tr><th scope="col">Short link</th><th scope="col">Goes to</th><th scope="col" class="num">Clicks</th><th scope="col" class="when">Made</th></tr>
+        </thead>
+        <tbody id="links"></tbody>
+      </table>
+    </section>
+
+    <section class="stats" id="stats" hidden tabindex="-1">
+      <div class="section-head">
+        <h2 id="stats-title"></h2>
+        <button type="button" class="ghost small" id="stats-close">Close</button>
+      </div>
+      <p class="dest" id="stats-dest"></p>
+      <div class="stats-top">
+        <div class="big">
+          <span class="big-number" id="stats-total"></span>
+          <span class="muted">clicks in total</span>
+        </div>
+        <div class="big">
+          <span class="big-number" id="stats-week"></span>
+          <span class="muted">in the last 7 days</span>
+        </div>
+      </div>
+      <figure class="chart">
+        <figcaption class="muted">Clicks per day, last 30 days</figcaption>
+        <svg id="chart" role="img" aria-labelledby="chart-label" preserveAspectRatio="none"></svg>
+        <span class="sr-only" id="chart-label"></span>
+        <div class="chart-axis"><span id="axis-start"></span><span>today</span></div>
+      </figure>
+      <div class="breakdowns">
+        <div><h3>Where from</h3><ol class="bars" id="referrers"></ol></div>
+        <div><h3>Device</h3><ol class="bars" id="devices"></ol></div>
+        <div><h3>Browser</h3><ol class="bars" id="browsers"></ol></div>
+      </div>
+      <p class="muted note">Link previews (WhatsApp, Slack, Telegram drawing the card) and scripts aren't counted, only people.</p>
+    </section>
+  </main>
+</body>
+</html>
