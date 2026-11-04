@@ -21,7 +21,7 @@ interface Link {
 
 export interface Options {
   pool: pg.Pool;
-  /** what goes in front of the code, e.g. https://curto.link */
+  /** what goes in front of the code, e.g. https://trail.link */
   baseUrl: string;
   timezone?: string;
   clickFlushMs?: number;

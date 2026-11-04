@@ -1,8 +1,8 @@
-# curto
+# trail
 
 ![tests](https://github.com/ViniciuscLemos/url-shortener/actions/workflows/tests.yml/badge.svg)
 
-A link shortener that also tells you who clicked: how many people, on which days, coming from where, on a phone or a computer. "Curto" is Portuguese for short.
+A link shortener that also tells you who clicked: how many people, on which days, coming from where, on a phone or a computer. The name is for that part: every click leaves a trail.
 
 ![The page: a field to paste a link, the short link that was just made, a table of your links with their clicks, and the numbers of one link with a chart of the last 30 days](docs/page.png)
 
@@ -53,7 +53,7 @@ npm run demo
 With a real database:
 
 ```bash
-DATABASE_URL=postgres://user:pass@localhost:5432/curto BASE_URL=https://your.domain npm start
+DATABASE_URL=postgres://user:pass@localhost:5432/trail BASE_URL=https://your.domain npm start
 ```
 
 The tables are created on start (`migrations/`).

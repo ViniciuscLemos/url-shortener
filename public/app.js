@@ -1,11 +1,17 @@
 // the page: make a link, list the ones made in this browser, open the numbers of one
 
 const $ = (id) => document.getElementById(id);
-const STORE = 'curto.links';
+const STORE = 'trail.links';
 const host = location.host;
 
 function saved() {
   try {
+    // links made before the rename were kept under the old name
+    const old = localStorage.getItem('curto.links');
+    if (old && !localStorage.getItem(STORE)) {
+      localStorage.setItem(STORE, old);
+      localStorage.removeItem('curto.links');
+    }
     return JSON.parse(localStorage.getItem(STORE)) || [];
   } catch {
     return [];
@@ -161,7 +167,7 @@ async function openStats(code) {
 function setQr(link, code) {
   const src = `/api/links/${encodeURIComponent(code)}/qr.svg`;
   link.href = src;
-  link.download = `curto-${code}.svg`;
+  link.download = `trail-${code}.svg`;
   link.querySelector('img').src = src;
   link.querySelector('img').alt = `QR code for ${host}/${code}`;
 }
