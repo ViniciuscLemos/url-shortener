@@ -82,6 +82,7 @@ function showResult(link) {
   $('result-link').href = link.shortUrl;
   $('result-link').textContent = plain(link.shortUrl);
   $('result-dest').textContent = `→ ${link.url}`;
+  setQr($('result-qr'), link.code);
   $('result').hidden = false;
 }
 
@@ -144,6 +145,7 @@ async function openStats(code) {
   const { stats } = data;
   $('stats-title').textContent = `${host}/${data.code}`;
   $('stats-dest').textContent = `→ ${data.url}`;
+  setQr($('stats-qr'), data.code);
   $('stats-total').textContent = stats.total.toLocaleString('en-US');
   $('stats-week').textContent = stats.days.slice(-7).reduce((sum, d) => sum + d.clicks, 0).toLocaleString('en-US');
   drawChart(stats.days);
@@ -153,6 +155,15 @@ async function openStats(code) {
   $('stats').hidden = false;
   $('stats').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('stats').focus({ preventScroll: true });
+}
+
+// the same image works to look at and to download (a file named after the link)
+function setQr(link, code) {
+  const src = `/api/links/${encodeURIComponent(code)}/qr.svg`;
+  link.href = src;
+  link.download = `curto-${code}.svg`;
+  link.querySelector('img').src = src;
+  link.querySelector('img').alt = `QR code for ${host}/${code}`;
 }
 
 function drawChart(days) {

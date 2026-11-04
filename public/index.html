@@ -33,12 +33,15 @@
     </form>
 
     <section class="result" id="result" hidden aria-live="polite">
-      <p class="label">Your short link</p>
-      <div class="result-row">
-        <a class="short" id="result-link" target="_blank" rel="noopener"></a>
-        <button type="button" class="ghost" id="copy">Copy</button>
+      <div class="result-main">
+        <p class="label">Your short link</p>
+        <div class="result-row">
+          <a class="short" id="result-link" target="_blank" rel="noopener"></a>
+          <button type="button" class="ghost" id="copy">Copy</button>
+        </div>
+        <p class="dest" id="result-dest"></p>
       </div>
-      <p class="dest" id="result-dest"></p>
+      <a class="qr" id="result-qr" download title="Download the QR code"><img alt="" width="88" height="88"><span>QR code</span></a>
     </section>
 
     <section class="links" id="links-section" hidden>
@@ -61,6 +64,7 @@
       </div>
       <p class="dest" id="stats-dest"></p>
       <div class="stats-top">
+        <a class="qr stats-qr" id="stats-qr" download title="Download the QR code"><img alt="" width="96" height="96"><span>Download QR</span></a>
         <div class="big">
           <span class="big-number" id="stats-total"></span>
           <span class="muted">clicks in total</span>
