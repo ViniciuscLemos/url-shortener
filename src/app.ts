@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
+import QRCode from 'qrcode';
 import type pg from 'pg';
 import { ClickQueue, browserOf, deviceOf, isBot, referrerOf } from './clicks.ts';
 import { RateLimit } from './limits.ts';
@@ -113,6 +114,17 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     const fresh = (await pool.query<Link>('SELECT * FROM links WHERE id = $1', [link.id])).rows[0]!;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
     return { ...view(fresh), stats: await linkStats(pool, fresh.id, Number(fresh.clicks), days, options.timezone) };
+  });
+
+  // a QR code of the short link, for a poster or a menu on the table. The short link is
+  // what goes in it, so the clicks from the QR are counted too
+  app.get<{ Params: { code: string } }>('/api/links/:code/qr.svg', async (req, reply) => {
+    const { rows } = await pool.query<{ code: string }>('SELECT code FROM links WHERE code = $1', [req.params.code.toLowerCase()]);
+    if (!rows[0]) return reply.code(404).send({ error: 'No short link with this name.' });
+    const svg = await QRCode.toString(`${baseUrl}/${rows[0].code}`, {
+      type: 'svg', margin: 2, errorCorrectionLevel: 'M', color: { dark: '#161513', light: '#ffffff' },
+    });
+    return reply.type('image/svg+xml').header('Cache-Control', 'public, max-age=86400').send(svg);
   });
 
   app.get<{ Params: { code: string } }>('/:code', async (req, reply) => {

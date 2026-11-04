@@ -80,6 +80,15 @@ describe('making links', () => {
     await strict.close();
   });
 
+  it('gives a QR code of the short link', async () => {
+    const { code } = (await shorten({ url: 'https://example.com', alias: 'menu' })).json();
+    const qr = await app.inject({ method: 'GET', url: `/api/links/${code}/qr.svg` });
+    expect(qr.statusCode).toBe(200);
+    expect(qr.headers['content-type']).toContain('image/svg+xml');
+    expect(qr.body).toMatch(/^<svg[\s\S]*<path/);
+    expect((await app.inject({ method: 'GET', url: '/api/links/nope123/qr.svg' })).statusCode).toBe(404);
+  });
+
   it('unknown codes get a 404 page', async () => {
     const res = await visit('nothere');
     expect(res.statusCode).toBe(404);
