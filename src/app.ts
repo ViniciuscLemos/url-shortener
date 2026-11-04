@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import type pg from 'pg';
 import { ClickQueue, browserOf, deviceOf, isBot, referrerOf } from './clicks.ts';
+import { RateLimit } from './limits.ts';
 import { checkAlias, checkUrl, randomCode } from './links.ts';
 import { linkStats } from './stats.ts';
 
@@ -23,6 +24,8 @@ export interface Options {
   baseUrl: string;
   timezone?: string;
   clickFlushMs?: number;
+  /** links one IP can make per 10 minutes (default 20) */
+  linksPer10Min?: number;
 }
 
 /**
@@ -54,6 +57,8 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
   const app = Fastify({ logger: false, trustProxy: true });
   const clicks = new ClickQueue(pool, options.clickFlushMs ?? 2000);
   const recent = new RecentLinks();
+  // a shortener without a limit turns into a free tool for spam
+  const limit = new RateLimit(options.linksPer10Min ?? 20, 10 * 60_000);
 
   const view = (link: Link) => ({
     code: link.code,
@@ -67,6 +72,12 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
   app.get('/', (_req, reply) => reply.sendFile('index.html'));
 
   app.post<{ Body: { url?: unknown; alias?: unknown } }>('/api/links', async (req, reply) => {
+    const wait = limit.take(req.ip);
+    if (wait) {
+      const minutes = Math.ceil(wait / 60_000);
+      return reply.code(429).header('Retry-After', Math.ceil(wait / 1000))
+        .send({ error: `That's a lot of links in a short time. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.` });
+    }
     const body = req.body ?? {};
     const url = checkUrl(typeof body.url === 'string' ? body.url : '', ownHost);
     if (!url.ok) return reply.code(400).send({ error: url.error });

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
 import { browserOf, deviceOf, isBot, referrerOf } from '../src/clicks.ts';
+import { RateLimit } from '../src/limits.ts';
 import { checkAlias, checkUrl, randomCode } from '../src/links.ts';
 import { startDatabase } from './db.ts';
 
@@ -67,6 +68,18 @@ describe('making links', () => {
     }
   });
 
+  it('one IP can only make so many links in a row', async () => {
+    const strict = buildApp({ pool: db.pool, baseUrl: BASE, clickFlushMs: 0, linksPer10Min: 3 });
+    const make = (ip: string) => strict.inject({ method: 'POST', url: '/api/links', payload: { url: 'https://example.com' }, remoteAddress: ip });
+    for (let i = 0; i < 3; i++) expect((await make('10.0.0.1')).statusCode).toBe(201);
+    const blocked = await make('10.0.0.1');
+    expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error).toContain('Try again in 10 minutes');
+    expect(Number(blocked.headers['retry-after'])).toBeGreaterThan(590);
+    expect((await make('10.0.0.2')).statusCode).toBe(201);
+    await strict.close();
+  });
+
   it('unknown codes get a 404 page', async () => {
     const res = await visit('nothere');
     expect(res.statusCode).toBe(404);
@@ -125,6 +138,17 @@ describe('small pieces', () => {
     expect(isBot('Mozilla/5.0 (compatible; Googlebot/2.1)')).toBe(true);
     expect(referrerOf('not a url')).toBeNull();
     expect(referrerOf('https://www.google.com/search?q=x')).toBe('google.com');
+  });
+
+  it('the limit counts per key and frees up as time passes', () => {
+    let now = 0;
+    const limit = new RateLimit(2, 1000, () => now);
+    expect(limit.take('a')).toBe(0);
+    expect(limit.take('a')).toBe(0);
+    expect(limit.take('a')).toBe(1000);
+    expect(limit.take('b')).toBe(0);
+    now = 1001;
+    expect(limit.take('a')).toBe(0);
   });
 
   it('checks links and names without a database', () => {
