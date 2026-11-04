@@ -8,7 +8,7 @@ A link shortener that also tells you who clicked: how many people, on which days
 
 I wanted something like short.io or Bitly to see how they work inside. Making the short link is the easy part. The interesting parts are the redirect, that has to be fast and can't wait on the database, and counting clicks without counting the wrong things.
 
-Work in progress. What works: making links (random or with a custom name), the redirect, the click counting and the stats page.
+Work in progress. What works: making links (random or with a custom name), the redirect, the click counting, the stats page and a QR code for each link.
 
 ## How it works
 
@@ -17,6 +17,8 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **Which links are accepted.** Only `http` and `https`. `javascript:`, `data:` and `file:` would turn a trusted looking short link into a way to attack whoever clicks. A link to this site itself is refused too, since it could loop. `example.com/page` without the `https://` gets it added, because that's how people paste.
 - **302, not 301.** A browser remembers a 301 forever and stops asking the server, so the next clicks wouldn't be counted and the link could never be changed.
 - **Clicks don't slow the redirect.** They wait in memory and go to the database in batches: every 2 seconds or every 200 clicks, one `INSERT` for all of them (`unnest` of arrays) and one `UPDATE` for the totals. If the database is having a bad moment, a few clicks are lost but the redirects keep working.
+- **A limit against spam.** One IP can make 20 links every 10 minutes; after that it gets a 429 with how long to wait. A shortener without a limit becomes a free tool to hide spam links.
+- **QR code.** Every link has one (`/api/links/{code}/qr.svg`), for a poster or the menu on a restaurant table. It holds the short link, not the long one, so the scans are counted like any other click.
 - **Hot links skip the database.** The last 1000 links used stay in memory, so a popular link is answered without a query.
 - **Only people count.** WhatsApp, Slack, Telegram and the like open the link to draw the preview card. That isn't a click, so user agents of bots, previews and scripts are left out. From each click it keeps the day, the site it came from (just `instagram.com`, not the whole address), the kind of device and the browser. No IP.
 - **The stats.** Clicks per day for the last 30 days in the São Paulo timezone (a click at 23:30 there is already the next day in UTC), with `generate_series` filling the days without clicks so the chart has no holes. Every query goes through the `(link_id, clicked_at)` index and only reads that link's rows in that window. The total is a column updated with each batch, so it never needs a `COUNT(*)` over everything.
@@ -34,6 +36,7 @@ Works on a phone and follows the system's dark mode:
 |---|---|
 | `POST /api/links` | `{"url": "...", "alias": "optional"}` → the short link (201), 400 for a bad link or name, 409 for a taken name |
 | `GET /api/links/{code}` | the link, its total and the stats (`?days=` up to 90) |
+| `GET /api/links/{code}/qr.svg` | the QR code of the short link |
 | `GET /{code}` | the redirect |
 
 ## Running it
@@ -75,6 +78,4 @@ public/         the page, plain HTML, CSS and JS
 
 - a login, so "your links" lives in an account instead of the browser
 - editing where a link goes, and turning it off
-- a limit of links per IP per hour against spam
-- QR code for each link
 - a daily summary table, so stats over a year don't have to read every click
