@@ -3,7 +3,8 @@ import { createPool, migrate } from './db.ts';
 import { seedDemo } from './demo.ts';
 
 const port = Number(process.env.PORT ?? 3000);
-const baseUrl = (process.env.BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, '');
+// Render fills RENDER_EXTERNAL_URL on its own, so BASE_URL is only needed for a custom domain
+const baseUrl = (process.env.BASE_URL || process.env.RENDER_EXTERNAL_URL || `http://localhost:${port}`).replace(/\/$/, '');
 
 const pool = createPool();
 const ran = await migrate(pool);
