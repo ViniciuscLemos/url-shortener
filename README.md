@@ -4,6 +4,8 @@
 
 A link shortener that also tells you who clicked: how many people, on which days, coming from where, on a phone or a computer. The name is for that part: every click leaves a trail.
 
+Try it: **[trail-sfqz.onrender.com](https://trail-sfqz.onrender.com)** (free instance, the first visit after a while takes a few seconds to wake up).
+
 ![The page: a field to paste a link, the short link that was just made, a table of your links with their clicks, and the numbers of one link with a chart of the last 30 days](docs/page.png)
 
 I wanted something like short.io or Bitly to see how they work inside. Making the short link is the easy part. The interesting parts are the redirect, that has to be fast and can't wait on the database, and counting clicks without counting the wrong things.
