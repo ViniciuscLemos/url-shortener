@@ -89,6 +89,14 @@ describe('making links', () => {
     expect((await app.inject({ method: 'GET', url: '/api/links/nope123/qr.svg' })).statusCode).toBe(404);
   });
 
+  it('health and the examples of the demo', async () => {
+    expect((await app.inject({ method: 'GET', url: '/health' })).json()).toEqual({ ok: true });
+    expect((await app.inject({ method: 'GET', url: '/api/config' })).json()).toEqual({ examples: [] });
+    const demo = buildApp({ pool: db.pool, baseUrl: BASE, clickFlushMs: 0, demo: true });
+    expect((await demo.inject({ method: 'GET', url: '/api/config' })).json().examples).toContain('black-friday');
+    await demo.close();
+  });
+
   it('unknown codes get a 404 page', async () => {
     const res = await visit('nothere');
     expect(res.statusCode).toBe(404);

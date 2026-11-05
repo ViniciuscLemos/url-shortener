@@ -7,6 +7,7 @@ import type pg from 'pg';
 import { ClickQueue, browserOf, deviceOf, isBot, referrerOf } from './clicks.ts';
 import { RateLimit } from './limits.ts';
 import { checkAlias, checkUrl, randomCode } from './links.ts';
+import { DEMO_LINKS } from './demo.ts';
 import { linkStats } from './stats.ts';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -27,6 +28,8 @@ export interface Options {
   clickFlushMs?: number;
   /** links one IP can make per 10 minutes (default 20) */
   linksPer10Min?: number;
+  /** the public demo: the page shows the example links to someone who hasn't made any */
+  demo?: boolean;
 }
 
 /**
@@ -71,6 +74,14 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
 
   app.register(fastifyStatic, { root: PUBLIC, prefix: '/assets/' });
   app.get('/', (_req, reply) => reply.sendFile('index.html'));
+
+  // for the host's health check and the ping that keeps the free instance awake
+  app.get('/health', async () => {
+    await pool.query('SELECT 1');
+    return { ok: true };
+  });
+
+  app.get('/api/config', async () => ({ examples: options.demo ? DEMO_LINKS.map((l) => l.code) : [] }));
 
   app.post<{ Body: { url?: unknown; alias?: unknown } }>('/api/links', async (req, reply) => {
     const wait = limit.take(req.ip);

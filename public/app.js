@@ -106,6 +106,10 @@ $('copy').addEventListener('click', async () => {
 
 async function renderLinks() {
   const list = saved();
+  // the public demo shows its example links to someone who hasn't made any yet
+  if (!list.length && examples.length) {
+    list.push(...examples.map((code) => ({ code, url: '', createdAt: null, example: true })));
+  }
   $('links-section').hidden = !list.length;
   if (!list.length) return;
 
@@ -115,7 +119,7 @@ async function renderLinks() {
       el('td', { class: 'code' }, `${host}/${link.code}`),
       el('td', { class: 'dest-cell', title: link.url }, plain(link.url)),
       clicks,
-      el('td', { class: 'when' }, ago(link.createdAt)));
+      el('td', { class: 'when' }, link.example ? 'example' : ago(link.createdAt)));
     row.addEventListener('click', () => openStats(link.code));
     row.addEventListener('keydown', (e) => { if (e.key === 'Enter') openStats(link.code); });
     return { row, clicks, link };
@@ -127,6 +131,7 @@ async function renderLinks() {
     try {
       const data = await api(`/api/links/${link.code}?days=1`);
       clicks.textContent = data.clicks.toLocaleString('en-US');
+      if (link.example) row.children[1].textContent = plain(data.url);
     } catch (err) {
       if (err.status === 404) {
         row.remove();
@@ -228,4 +233,5 @@ $('stats-close').addEventListener('click', () => {
   for (const tr of $('links').children) tr.setAttribute('aria-selected', 'false');
 });
 
-renderLinks();
+let examples = [];
+api('/api/config').then((config) => { examples = config.examples; }).catch(() => {}).finally(renderLinks);
