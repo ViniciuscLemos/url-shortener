@@ -1,0 +1,23 @@
+# Render config (Blueprint): one Node service on the free plan. The database is a free Neon
+# Postgres (Render's free one is deleted after 30 days), so DATABASE_URL is pasted by hand.
+services:
+  - type: web
+    name: trail
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # the public demo: example links with a month of clicks
+      - key: DEMO_SEED
+        value: "true"
+      # the address people see in the short links, e.g. https://trail-xxxx.onrender.com
+      - key: BASE_URL
+        sync: false
+      # postgres://user:password@HOST/neondb?sslmode=require
+      - key: DATABASE_URL
+        sync: false

@@ -64,6 +64,17 @@ Tests, on a real Postgres too (the embedded one locally, a service container in 
 npm test
 ```
 
+## Putting it online
+
+It runs on Render's free plan (`render.yaml`), with the database on a free [Neon](https://neon.tech) Postgres, since Render's free database is deleted after 30 days.
+
+1. Create a project on Neon and copy the connection string (`postgres://...?sslmode=require`).
+2. On Render, New > Blueprint, pick this repo, paste the string in `DATABASE_URL` and the service's address in `BASE_URL`.
+
+`DEMO_SEED=true` (already in the blueprint) adds the example links with a month of clicks, and the page shows them to anyone who hasn't made a link yet. `GET /health` is there for Render's health check.
+
+The free instance sleeps after 15 minutes without visits, so the first link opened after that takes a few seconds.
+
 ## How the code is split
 
 ```
