@@ -53,7 +53,7 @@ export class ClickQueue {
   private timer: NodeJS.Timeout | null = null;
   private flushing: Promise<void> = Promise.resolve();
 
-  constructor(private pool: pg.Pool, private everyMs = 2000, private maxBatch = 200) {}
+  constructor(private pool: pg.Pool, private everyMs = 2000, private maxBatch = 200, private tz = 'America/Sao_Paulo') {}
 
   add(click: Click): void {
     this.waiting.push(click);
@@ -88,6 +88,14 @@ export class ClickQueue {
         `UPDATE links SET clicks = links.clicks + n.count
          FROM unnest($1::bigint[], $2::bigint[]) AS n(id, count) WHERE links.id = n.id`,
         [[...perLink.keys()], [...perLink.values()]],
+      );
+      // and the day's count, which is what the chart reads
+      await client.query(
+        `INSERT INTO link_days (link_id, day, clicks)
+         SELECT link_id, (at AT TIME ZONE $3)::date, count(*)
+         FROM unnest($1::bigint[], $2::timestamptz[]) AS c(link_id, at) GROUP BY 1, 2
+         ON CONFLICT (link_id, day) DO UPDATE SET clicks = link_days.clicks + EXCLUDED.clicks`,
+        [batch.map((c) => c.linkId), batch.map((c) => c.at), this.tz],
       );
       await client.query('COMMIT');
     } catch (err) {

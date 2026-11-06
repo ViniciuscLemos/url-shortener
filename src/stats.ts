@@ -9,22 +9,20 @@ export interface Stats {
 }
 
 /**
- * Clicks of one link over the last `days` days, counted by day in the given timezone
- * (a click at 23:30 in São Paulo is already "tomorrow" in UTC). Every query goes through
- * the (link_id, clicked_at) index and only touches that link's rows in the window.
+ * Clicks of one link over the last `days` days, by day in the given timezone (a click at
+ * 23:30 in São Paulo is already "tomorrow" in UTC). The days come from the daily summary;
+ * the breakdowns go through the (link_id, clicked_at) index and only touch that link's
+ * rows in the window.
  */
 export async function linkStats(pool: pg.Pool, linkId: number, total: number, days = 30, tz = 'America/Sao_Paulo'): Promise<Stats> {
   const since = `now() - make_interval(days => $2)`;
   const [perDay, referrers, devices, browsers] = await Promise.all([
-    // generate_series fills the days without clicks with 0, so the chart has no holes
+    // one row per day from link_days (kept by each batch of clicks), and generate_series
+    // fills the days without clicks with 0, so the chart has no holes
     pool.query<{ day: string; clicks: string }>(
-      `SELECT to_char(d.day, 'YYYY-MM-DD') AS day, COALESCE(c.clicks, 0) AS clicks
+      `SELECT to_char(d.day, 'YYYY-MM-DD') AS day, COALESCE(s.clicks, 0) AS clicks
        FROM generate_series((now() AT TIME ZONE $3)::date - ($2 - 1), (now() AT TIME ZONE $3)::date, interval '1 day') AS d(day)
-       LEFT JOIN (
-         SELECT (clicked_at AT TIME ZONE $3)::date AS day, count(*) AS clicks
-         FROM clicks WHERE link_id = $1 AND clicked_at > ${since}
-         GROUP BY 1
-       ) c ON c.day = d.day
+       LEFT JOIN link_days s ON s.link_id = $1 AND s.day = d.day::date
        ORDER BY d.day`,
       [linkId, days, tz],
     ),

@@ -24,7 +24,7 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **QR code.** Every link has one (`/api/links/{code}/qr.svg`), for a poster or the menu on a restaurant table. It holds the short link, not the long one, so the scans are counted like any other click.
 - **Hot links skip the database.** The last 1000 links used stay in memory, so a popular link is answered without a query.
 - **Only people count.** WhatsApp, Slack, Telegram and the like open the link to draw the preview card. That isn't a click, so user agents of bots, previews and scripts are left out. From each click it keeps the day, the site it came from (just `instagram.com`, not the whole address), the kind of device and the browser. No IP.
-- **The stats.** Clicks per day for the last 30 days in the São Paulo timezone (a click at 23:30 there is already the next day in UTC), with `generate_series` filling the days without clicks so the chart has no holes. Every query goes through the `(link_id, clicked_at)` index and only reads that link's rows in that window. The total is a column updated with each batch, so it never needs a `COUNT(*)` over everything.
+- **The stats.** Clicks per day for the last 30 days in the São Paulo timezone (a click at 23:30 there is already the next day in UTC), with `generate_series` filling the days without clicks so the chart has no holes. Every query goes through the `(link_id, clicked_at)` index and only reads that link's rows in that window. The total is a column updated with each batch, so it never needs a `COUNT(*)` over everything. The chart doesn't count clicks either: each batch also adds to a `link_days` table (one row per link per day, an `INSERT ... ON CONFLICT DO UPDATE`), and the 30 days are 30 small rows from there. A link with a million clicks draws as fast as one with ten.
 
 Works on a phone and follows the system's dark mode:
 
@@ -92,4 +92,3 @@ public/         the page, plain HTML, CSS and JS
 ## What's next
 
 - a login, so "your links" lives in an account instead of the browser
-- a daily summary table, so stats over a year don't have to read every click

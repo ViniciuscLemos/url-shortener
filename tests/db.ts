@@ -45,7 +45,7 @@ export async function startDatabase() {
   await migrate(pool);
   return {
     pool,
-    clear: () => pool.query('TRUNCATE links, clicks RESTART IDENTITY CASCADE'),
+    clear: () => pool.query('TRUNCATE links, clicks, link_days RESTART IDENTITY CASCADE'),
     async stop() {
       await pool.end();
       await stop();

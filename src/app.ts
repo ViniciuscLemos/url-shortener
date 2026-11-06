@@ -66,7 +66,7 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
   const { pool, baseUrl } = options;
   const ownHost = new URL(baseUrl).host;
   const app = Fastify({ logger: false, trustProxy: true });
-  const clicks = new ClickQueue(pool, options.clickFlushMs ?? 2000);
+  const clicks = new ClickQueue(pool, options.clickFlushMs ?? 2000, 200, options.timezone);
   const recent = new RecentLinks();
   // a shortener without a limit turns into a free tool for spam
   const limit = new RateLimit(options.linksPer10Min ?? 20, 10 * 60_000);

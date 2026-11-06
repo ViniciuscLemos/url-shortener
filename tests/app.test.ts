@@ -189,6 +189,21 @@ describe('counting clicks', () => {
     expect((await db.pool.query('SELECT count(*) FROM clicks')).rows[0].count).toBe('25');
   });
 
+  it('the chart reads the daily summary, which every batch keeps up to date', async () => {
+    const { code } = (await shorten({ url: 'https://example.com' })).json();
+    for (let i = 0; i < 3; i++) await visit(code);
+    await app.clicks.flush();
+    await visit(code);
+    await app.clicks.flush();
+    const { rows } = await db.pool.query('SELECT clicks FROM link_days');
+    expect(rows.map((r) => Number(r.clicks))).toEqual([4]);
+
+    // with the raw clicks gone the days still add up: they don't come from there anymore
+    await db.pool.query('DELETE FROM clicks');
+    const stats = (await app.inject({ method: 'GET', url: `/api/links/${code}` })).json().stats;
+    expect(stats.days.at(-1).clicks).toBe(4);
+  });
+
   it('stats of a link that does not exist is a 404', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/links/nope123' })).statusCode).toBe(404);
   });

@@ -51,6 +51,11 @@ export async function seedDemo(pool: pg.Pool): Promise<boolean> {
       [clicks.map((c) => c[0]), clicks.map((c) => c[1]), clicks.map((c) => c[2]), clicks.map((c) => c[3]), clicks.map((c) => c[4])],
     );
     await pool.query('UPDATE links SET clicks = $1 WHERE id = $2', [clicks.length, id]);
+    await pool.query(
+      `INSERT INTO link_days (link_id, day, clicks)
+       SELECT link_id, (clicked_at AT TIME ZONE 'America/Sao_Paulo')::date, count(*) FROM clicks WHERE link_id = $1 GROUP BY 1, 2`,
+      [id],
+    );
   }
   return true;
 }
