@@ -20,6 +20,7 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **302, not 301.** A browser remembers a 301 forever and stops asking the server, so the next clicks wouldn't be counted and the link could never be changed.
 - **Clicks don't slow the redirect.** They wait in memory and go to the database in batches: every 2 seconds or every 200 clicks, one `INSERT` for all of them (`unnest` of arrays) and one `UPDATE` for the totals. If the database is having a bad moment, a few clicks are lost but the redirects keep working.
 - **A limit against spam.** One IP can make 20 links every 10 minutes; after that it gets a 429 with how long to wait. A shortener without a limit becomes a free tool to hide spam links.
+- **Changing a link later, without accounts.** Making a link gives back a secret token, once, and the page keeps it in the browser. With it the link can point somewhere else (going through the same checks as a new one) or be turned off, which answers `410 Gone` with a page that says so, and stops counting. Only a SHA-256 of the token is stored and it's compared in constant time. The copy of the link kept in memory is dropped on every change, otherwise people would keep landing on the old address.
 - **QR code.** Every link has one (`/api/links/{code}/qr.svg`), for a poster or the menu on a restaurant table. It holds the short link, not the long one, so the scans are counted like any other click.
 - **Hot links skip the database.** The last 1000 links used stay in memory, so a popular link is answered without a query.
 - **Only people count.** WhatsApp, Slack, Telegram and the like open the link to draw the preview card. That isn't a click, so user agents of bots, previews and scripts are left out. From each click it keeps the day, the site it came from (just `instagram.com`, not the whole address), the kind of device and the browser. No IP.
@@ -36,10 +37,11 @@ Works on a phone and follows the system's dark mode:
 
 | | |
 |---|---|
-| `POST /api/links` | `{"url": "...", "alias": "optional"}` → the short link (201), 400 for a bad link or name, 409 for a taken name |
+| `POST /api/links` | `{"url": "...", "alias": "optional"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
+| `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}` or `{"disabled": true}` → the link; 403 without the right token |
 | `GET /api/links/{code}` | the link, its total and the stats (`?days=` up to 90) |
 | `GET /api/links/{code}/qr.svg` | the QR code of the short link |
-| `GET /{code}` | the redirect |
+| `GET /{code}` | the redirect (410 when the link is turned off) |
 
 ## Running it
 
@@ -90,5 +92,4 @@ public/         the page, plain HTML, CSS and JS
 ## What's next
 
 - a login, so "your links" lives in an account instead of the browser
-- editing where a link goes, and turning it off
 - a daily summary table, so stats over a year don't have to read every click

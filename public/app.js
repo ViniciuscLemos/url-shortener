@@ -70,7 +70,9 @@ $('shorten').addEventListener('submit', async (event) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: $('url').value, alias: $('alias').value }),
     });
-    save([{ code: link.code, url: link.url, createdAt: link.createdAt }, ...saved().filter((l) => l.code !== link.code)]);
+    // the owner token comes only in this answer: it's what lets this browser change the link later
+    save([{ code: link.code, url: link.url, createdAt: link.createdAt, token: link.ownerToken },
+      ...saved().filter((l) => l.code !== link.code)]);
     showResult(link);
     $('url').value = '';
     $('alias').value = '';
@@ -131,7 +133,9 @@ async function renderLinks() {
     try {
       const data = await api(`/api/links/${link.code}?days=1`);
       clicks.textContent = data.clicks.toLocaleString('en-US');
-      if (link.example) row.children[1].textContent = plain(data.url);
+      row.children[1].textContent = plain(data.url);
+      row.classList.toggle('is-off', data.disabled);
+      if (data.disabled) row.children[3].textContent = 'turned off';
     } catch (err) {
       if (err.status === 404) {
         row.remove();
@@ -156,6 +160,7 @@ async function openStats(code) {
   const { stats } = data;
   $('stats-title').textContent = `${host}/${data.code}`;
   $('stats-dest').textContent = `→ ${data.url}`;
+  showOwner(data);
   setQr($('stats-qr'), data.code);
   $('stats-total').textContent = stats.total.toLocaleString('en-US');
   $('stats-week').textContent = stats.days.slice(-7).reduce((sum, d) => sum + d.clicks, 0).toLocaleString('en-US');
@@ -227,6 +232,49 @@ function bars(id, rows, label) {
       el('span', { class: 'bar-track' }, fill));
   }));
 }
+
+// changing a link: only shown in the browser that made it, the one holding its token
+
+let current = null;
+
+function tokenOf(code) {
+  return saved().find((l) => l.code === code)?.token;
+}
+
+function showOwner(data) {
+  current = data;
+  $('stats-off').hidden = !data.disabled;
+  $('owner').hidden = !tokenOf(data.code);
+  $('owner-error').hidden = true;
+  $('new-url').value = data.url;
+  $('toggle-off').textContent = data.disabled ? 'Turn it back on' : 'Turn off';
+}
+
+async function change(body) {
+  const error = $('owner-error');
+  error.hidden = true;
+  try {
+    const data = await api(`/api/links/${current.code}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenOf(current.code)}` },
+      body: JSON.stringify(body),
+    });
+    save(saved().map((l) => (l.code === data.code ? { ...l, url: data.url } : l)));
+    $('stats-dest').textContent = `→ ${data.url}`;
+    showOwner({ ...current, ...data });
+    renderLinks();
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+  }
+}
+
+$('redirect-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if ($('new-url').value.trim() && $('new-url').value.trim() !== current.url) change({ url: $('new-url').value });
+});
+
+$('toggle-off').addEventListener('click', () => change({ disabled: !current.disabled }));
 
 $('stats-close').addEventListener('click', () => {
   $('stats').hidden = true;

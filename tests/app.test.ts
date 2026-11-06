@@ -15,7 +15,8 @@ let app: ReturnType<typeof buildApp>;
 beforeAll(async () => {
   db = await startDatabase();
   // clicks only go to the database when the test flushes them
-  app = buildApp({ pool: db.pool, baseUrl: BASE, clickFlushMs: 0 });
+  // a high link limit here: the limit has its own test, with its own app
+  app = buildApp({ pool: db.pool, baseUrl: BASE, clickFlushMs: 0, linksPer10Min: 1000 });
   await app.ready();
 }, 120_000);
 
@@ -33,6 +34,58 @@ beforeEach(async () => {
 const shorten = (body: object) => app.inject({ method: 'POST', url: '/api/links', payload: body });
 const visit = (code: string, headers: Record<string, string> = { 'user-agent': FIREFOX_PC }) =>
   app.inject({ method: 'GET', url: `/${code}`, headers });
+
+describe('changing a link later', () => {
+  const change = (code: string, body: object, token?: string) => app.inject({
+    method: 'PATCH', url: `/api/links/${code}`, payload: body,
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
+
+  it('whoever made it can point it somewhere else, and the next click goes there', async () => {
+    const link = (await shorten({ url: 'https://old.example.com' })).json();
+    expect(link.ownerToken).toMatch(/^[\w-]{32}$/);
+    expect((await visit(link.code)).headers.location).toBe('https://old.example.com/');
+
+    const res = await change(link.code, { url: 'new.example.com/page' }, link.ownerToken);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().url).toBe('https://new.example.com/page');
+    // the link was in memory after the first visit, and that copy has to go
+    expect((await visit(link.code)).headers.location).toBe('https://new.example.com/page');
+  });
+
+  it('nobody else can, and the token never comes back in a read', async () => {
+    const link = (await shorten({ url: 'https://example.com' })).json();
+    expect((await change(link.code, { url: 'https://evil.example' })).statusCode).toBe(403);
+    expect((await change(link.code, { url: 'https://evil.example' }, 'guess')).statusCode).toBe(403);
+    const read = (await app.inject({ method: 'GET', url: `/api/links/${link.code}` })).json();
+    expect(read.ownerToken).toBeUndefined();
+    expect(JSON.stringify(read)).not.toContain(link.ownerToken);
+  });
+
+  it('turned off answers 410 without counting, and comes back on', async () => {
+    const link = (await shorten({ url: 'https://example.com' })).json();
+    await visit(link.code);
+    const off = await change(link.code, { disabled: true }, link.ownerToken);
+    expect(off.json().disabled).toBe(true);
+
+    const gone = await visit(link.code);
+    expect(gone.statusCode).toBe(410);
+    expect(gone.body).toContain('turned off');
+    await app.clicks.flush();
+    expect((await app.inject({ method: 'GET', url: `/api/links/${link.code}` })).json().clicks).toBe(1);
+
+    await change(link.code, { disabled: false }, link.ownerToken);
+    expect((await visit(link.code)).statusCode).toBe(302);
+  });
+
+  it('the new address goes through the same checks', async () => {
+    const link = (await shorten({ url: 'https://example.com' })).json();
+    expect((await change(link.code, { url: 'javascript:alert(1)' }, link.ownerToken)).statusCode).toBe(400);
+    expect((await change(link.code, { url: `${BASE}/loop` }, link.ownerToken)).statusCode).toBe(400);
+    expect((await change(link.code, { disabled: 'yes' }, link.ownerToken)).statusCode).toBe(400);
+    expect((await change('nope', { disabled: true }, link.ownerToken)).statusCode).toBe(404);
+  });
+});
 
 describe('making links', () => {
   it('shortens a link and redirects with 302', async () => {

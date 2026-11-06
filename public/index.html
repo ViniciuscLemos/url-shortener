@@ -63,6 +63,18 @@
         <button type="button" class="ghost small" id="stats-close">Close</button>
       </div>
       <p class="dest" id="stats-dest"></p>
+      <p class="off-note" id="stats-off" hidden>Turned off: people who open it see a "this link was turned off" page.</p>
+      <div class="owner" id="owner" hidden>
+        <form id="redirect-form" class="redirect-form" novalidate>
+          <label for="new-url">Send it somewhere else</label>
+          <div class="redirect-row">
+            <input id="new-url" type="text" inputmode="url" autocomplete="off" spellcheck="false">
+            <button type="submit" class="ghost small">Save</button>
+          </div>
+        </form>
+        <button type="button" class="ghost small" id="toggle-off">Turn off</button>
+        <p class="error" id="owner-error" role="alert" hidden></p>
+      </div>
       <div class="stats-top">
         <a class="qr stats-qr" id="stats-qr" download title="Download the QR code"><img alt="" width="96" height="96"><span>Download QR</span></a>
         <div class="big">

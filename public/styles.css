@@ -132,3 +132,14 @@ h3 { font: 600 0.8rem var(--sans); text-transform: uppercase; letter-spacing: 0.
   .result { flex-direction: column; align-items: flex-start; }
   .stats-top .stats-qr { margin-left: 0; }
 }
+
+/* changing a link, for the browser that made it */
+.owner { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 18px; margin: 4px 0 22px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.redirect-form { flex: 1; min-width: 260px; }
+.redirect-form label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.redirect-row { display: flex; gap: 8px; }
+.redirect-row input { flex: 1; min-width: 0; font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: inherit; }
+.owner .error { width: 100%; margin: 0; }
+.off-note { margin: 6px 0 14px; font-size: 14px; color: var(--accent); }
+tr.is-off td { color: var(--muted); }
+tr.is-off .code { text-decoration: line-through; }
