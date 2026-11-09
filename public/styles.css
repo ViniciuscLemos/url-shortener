@@ -86,7 +86,11 @@ h3 { font: 600 0.8rem var(--sans); text-transform: uppercase; letter-spacing: 0.
 .links-table th { text-align: left; font-weight: 600; font-size: 0.8rem; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--ink); }
 .links-table td { padding: 12px 10px; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .links-table th:first-child { width: 34%; }
-.links-table .num { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+.links-table .num { width: 120px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.week { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; margin-right: 10px; vertical-align: -1px; }
+.week i { width: 3px; background: var(--ink, currentColor); opacity: .55; border-radius: 1px; }
+.week i.none { opacity: .2; }
+tr.is-off .week { display: none; }
 .links-table .when { width: 118px; color: var(--muted); }
 .links-table tbody tr { cursor: pointer; }
 .links-table tbody tr:hover, .links-table tbody tr[aria-selected="true"] { background: var(--soft); }

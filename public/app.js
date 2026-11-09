@@ -128,23 +128,41 @@ async function renderLinks() {
   });
   $('links').replaceChildren(...rows.map((r) => r.row));
 
-  // one request per link is fine for a handful; a link deleted on the server leaves the list
-  await Promise.all(rows.map(async ({ clicks, link, row }) => {
-    try {
-      const data = await api(`/api/links/${link.code}?days=1`);
-      clicks.textContent = data.clicks.toLocaleString('en-US');
-      row.children[1].textContent = plain(data.url);
-      row.classList.toggle('is-off', data.disabled);
-      if (data.disabled) row.children[3].textContent = 'turned off';
-    } catch (err) {
-      if (err.status === 404) {
-        row.remove();
-        save(saved().filter((l) => l.code !== link.code));
-      } else {
-        clicks.textContent = '–';
-      }
+  // the whole list in one request; a link that's gone from the server comes back missing
+  let found;
+  try {
+    found = await api(`/api/links?codes=${rows.map((r) => r.link.code).join(',')}`);
+  } catch {
+    for (const r of rows) r.clicks.textContent = '–';
+    return;
+  }
+  const byCode = new Map(found.map((l) => [l.code, l]));
+  for (const { clicks, link, row } of rows) {
+    const data = byCode.get(link.code);
+    if (!data) {
+      row.remove();
+      save(saved().filter((l) => l.code !== link.code));
+      continue;
     }
-  }));
+    clicks.replaceChildren(week(data.week), el('span', {}, data.clicks.toLocaleString('en-US')));
+    row.children[1].textContent = plain(data.url);
+    row.classList.toggle('is-off', data.disabled);
+    if (data.disabled) row.children[3].textContent = 'turned off';
+  }
+}
+
+// seven thin bars, one per day up to today: enough to see if a link is still being used
+function week(days) {
+  const top = Math.max(...days, 1);
+  const total = days.reduce((a, b) => a + b, 0);
+  const box = el('span', { class: 'week', title: `${total} in the last 7 days`, 'aria-label': `${total} clicks in the last 7 days` });
+  for (const n of days) {
+    const bar = el('i', {});
+    bar.style.height = `${n ? Math.max(2, Math.round((n / top) * 14)) : 1}px`;
+    if (!n) bar.className = 'none';
+    box.append(bar);
+  }
+  return box;
 }
 
 // the numbers of one link
