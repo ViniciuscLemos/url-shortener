@@ -147,3 +147,12 @@ tr.is-off .week { display: none; }
 .off-note { margin: 6px 0 14px; font-size: 14px; color: var(--accent); }
 tr.is-off td { color: var(--muted); }
 tr.is-off .code { text-decoration: line-through; }
+
+.owner-actions { display: flex; align-items: center; gap: 18px; }
+.link-danger, .link-plain { background: none; border: 0; padding: 0; font: inherit; font-size: 14px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-danger { color: #b3261e; }
+.link-plain { color: var(--muted); }
+.sure { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid #b3261e; background: color-mix(in srgb, #b3261e 7%, transparent); font-size: 14px; }
+.sure span { flex-basis: 100%; }
+.ghost.danger { color: #b3261e; border-color: currentColor; }
+@media (prefers-color-scheme: dark) { .link-danger, .ghost.danger { color: #ff8a80; } .sure { border-left-color: #ff8a80; } }

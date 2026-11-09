@@ -72,7 +72,15 @@
             <button type="submit" class="ghost small">Save</button>
           </div>
         </form>
-        <button type="button" class="ghost small" id="toggle-off">Turn off</button>
+        <div class="owner-actions">
+          <button type="button" class="ghost small" id="toggle-off">Turn off</button>
+          <button type="button" class="link-danger" id="delete-link">Delete for good</button>
+        </div>
+        <p class="sure" id="delete-sure" hidden>
+          <span id="delete-question"></span>
+          <button type="button" class="ghost small danger" id="delete-yes">Yes, delete it</button>
+          <button type="button" class="link-plain" id="delete-no">Keep it</button>
+        </p>
         <p class="error" id="owner-error" role="alert" hidden></p>
       </div>
       <div class="stats-top">

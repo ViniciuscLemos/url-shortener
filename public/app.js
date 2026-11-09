@@ -264,6 +264,7 @@ function showOwner(data) {
   $('stats-off').hidden = !data.disabled;
   $('owner').hidden = !tokenOf(data.code);
   $('owner-error').hidden = true;
+  $('delete-sure').hidden = true;
   $('new-url').value = data.url;
   $('toggle-off').textContent = data.disabled ? 'Turn it back on' : 'Turn off';
 }
@@ -293,6 +294,33 @@ $('redirect-form').addEventListener('submit', (event) => {
 });
 
 $('toggle-off').addEventListener('click', () => change({ disabled: !current.disabled }));
+
+// deleting asks once, in place, with the number of clicks that go with it
+$('delete-link').addEventListener('click', () => {
+  const n = current.clicks ?? current.stats?.total ?? 0;
+  $('delete-question').textContent = n
+    ? `This also deletes its ${n.toLocaleString('en-US')} click${n === 1 ? '' : 's'}, and anyone who opens ${host}/${current.code} gets "not found".`
+    : `Anyone who opens ${host}/${current.code} will get "not found".`;
+  $('delete-sure').hidden = false;
+  $('delete-yes').focus();
+});
+$('delete-no').addEventListener('click', () => { $('delete-sure').hidden = true; });
+$('delete-yes').addEventListener('click', async () => {
+  const error = $('owner-error');
+  error.hidden = true;
+  try {
+    await api(`/api/links/${current.code}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${tokenOf(current.code)}` },
+    });
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+    return;
+  }
+  save(saved().filter((l) => l.code !== current.code));
+  $('stats').hidden = true;
+  renderLinks();
+});
 
 $('stats-close').addEventListener('click', () => {
   $('stats').hidden = true;
