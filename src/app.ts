@@ -185,6 +185,22 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     return view(updated);
   });
 
+  // Deleting for good, clicks and all. Same token as changing it. The name is free again
+  // afterwards, so "black-friday" can be made again next year.
+  app.delete<{ Params: { code: string } }>('/api/links/:code', async (req, reply) => {
+    const code = req.params.code.toLowerCase();
+    const { rows } = await pool.query<Link>('SELECT * FROM links WHERE code = $1', [code]);
+    const link = rows[0];
+    if (!link) return reply.code(404).send({ error: 'No short link with this name.' });
+    if (!ownerMatches(req.headers.authorization, link.owner_token_hash)) {
+      return reply.code(403).send({ error: 'Only the browser that made this link can delete it.' });
+    }
+    await clicks.flush();
+    await pool.query('DELETE FROM links WHERE id = $1', [link.id]);
+    recent.forget(code);
+    return reply.code(204).send();
+  });
+
   // a QR code of the short link, for a poster or a menu on the table. The short link is
   // what goes in it, so the clicks from the QR are counted too
   app.get<{ Params: { code: string } }>('/api/links/:code/qr.svg', async (req, reply) => {

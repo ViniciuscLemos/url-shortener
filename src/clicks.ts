@@ -77,8 +77,10 @@ export class ClickQueue {
       await client.query('BEGIN');
       // unnest turns the arrays back into rows: the whole batch in a single statement
       await client.query(
+        // a link deleted while its clicks waited here is skipped, instead of failing the whole batch
         `INSERT INTO clicks (link_id, clicked_at, referrer, device, browser)
-         SELECT * FROM unnest($1::bigint[], $2::timestamptz[], $3::text[], $4::text[], $5::text[])`,
+         SELECT c.* FROM unnest($1::bigint[], $2::timestamptz[], $3::text[], $4::text[], $5::text[]) AS c(link_id, at, r, d, b)
+         WHERE EXISTS (SELECT 1 FROM links l WHERE l.id = c.link_id)`,
         [batch.map((c) => c.linkId), batch.map((c) => c.at), batch.map((c) => c.referrer),
           batch.map((c) => c.device), batch.map((c) => c.browser)],
       );
@@ -93,7 +95,8 @@ export class ClickQueue {
       await client.query(
         `INSERT INTO link_days (link_id, day, clicks)
          SELECT link_id, (at AT TIME ZONE $3)::date, count(*)
-         FROM unnest($1::bigint[], $2::timestamptz[]) AS c(link_id, at) GROUP BY 1, 2
+         FROM unnest($1::bigint[], $2::timestamptz[]) AS c(link_id, at)
+         WHERE EXISTS (SELECT 1 FROM links l WHERE l.id = c.link_id) GROUP BY 1, 2
          ON CONFLICT (link_id, day) DO UPDATE SET clicks = link_days.clicks + EXCLUDED.clicks`,
         [batch.map((c) => c.linkId), batch.map((c) => c.at), this.tz],
       );

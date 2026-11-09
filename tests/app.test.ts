@@ -78,6 +78,31 @@ describe('changing a link later', () => {
     expect((await visit(link.code)).statusCode).toBe(302);
   });
 
+  it('whoever made it can delete it, clicks and all, and the name is free again', async () => {
+    const link = (await shorten({ url: 'https://example.com', alias: 'old-promo' })).json();
+    await visit(link.code);
+    const remove = (token?: string) => app.inject({
+      method: 'DELETE', url: `/api/links/${link.code}`, headers: token ? { authorization: `Bearer ${token}` } : {},
+    });
+    expect((await remove()).statusCode).toBe(403);
+    // the click still in the queue goes in before the delete, so nothing fails later
+    expect((await remove(link.ownerToken)).statusCode).toBe(204);
+    expect((await visit(link.code)).statusCode).toBe(404);
+    const left = await db.pool.query('SELECT (SELECT count(*) FROM clicks) + (SELECT count(*) FROM link_days) AS n');
+    expect(Number(left.rows[0].n)).toBe(0);
+    expect((await shorten({ url: 'https://example.com/2027', alias: 'old-promo' })).statusCode).toBe(201);
+  });
+
+  it('a click waiting for a link deleted meanwhile doesn\'t take the batch down', async () => {
+    const a = (await shorten({ url: 'https://a.example.com' })).json();
+    const b = (await shorten({ url: 'https://b.example.com' })).json();
+    await visit(a.code);
+    await visit(b.code);
+    await db.pool.query('DELETE FROM links WHERE code = $1', [a.code]);
+    await app.clicks.flush();
+    expect((await app.inject({ method: 'GET', url: `/api/links/${b.code}` })).json().clicks).toBe(1);
+  });
+
   it('the new address goes through the same checks', async () => {
     const link = (await shorten({ url: 'https://example.com' })).json();
     expect((await change(link.code, { url: 'javascript:alert(1)' }, link.ownerToken)).statusCode).toBe(400);
