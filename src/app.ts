@@ -125,6 +125,26 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     return reply.code(503).send({ error: 'Could not make a code right now, try again.' });
   });
 
+  // The list of "your links" in one request instead of one per link: clicks so far and the
+  // last 7 days of each, for the little bars next to them. Codes that don't exist are left out,
+  // which is how the page learns a link is gone.
+  app.get<{ Querystring: { codes?: string } }>('/api/links', async (req, reply) => {
+    const codes = [...new Set((req.query.codes ?? '').toLowerCase().split(',').map((c) => c.trim()).filter(Boolean))];
+    if (!codes.length) return reply.code(400).send({ error: 'Which links? Send ?codes=a,b,c' });
+    if (codes.length > 50) return reply.code(400).send({ error: 'At most 50 links at a time.' });
+    await clicks.flush();
+    const { rows } = await pool.query<Link & { week: string[] }>(
+      `SELECT l.*, ARRAY(
+         SELECT COALESCE(s.clicks, 0)::text
+         FROM generate_series((now() AT TIME ZONE $2)::date - 6, (now() AT TIME ZONE $2)::date, interval '1 day') AS d(day)
+         LEFT JOIN link_days s ON s.link_id = l.id AND s.day = d.day::date
+         ORDER BY d.day) AS week
+       FROM links l WHERE l.code = ANY($1)`,
+      [codes, options.timezone ?? 'America/Sao_Paulo'],
+    );
+    return rows.map((link) => ({ ...view(link), week: link.week.map(Number) }));
+  });
+
   app.get<{ Params: { code: string }; Querystring: { days?: string } }>('/api/links/:code', async (req, reply) => {
     const { rows } = await pool.query<Link>('SELECT * FROM links WHERE code = $1', [req.params.code.toLowerCase()]);
     const link = rows[0];

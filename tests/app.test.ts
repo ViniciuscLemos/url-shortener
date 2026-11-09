@@ -204,6 +204,23 @@ describe('counting clicks', () => {
     expect(stats.days.at(-1).clicks).toBe(4);
   });
 
+  it('the list of links in one request, with the last 7 days of each', async () => {
+    const a = (await shorten({ url: 'https://a.example.com' })).json().code;
+    const b = (await shorten({ url: 'https://b.example.com' })).json().code;
+    for (let i = 0; i < 3; i++) await visit(a);
+    const res = await app.inject({ method: 'GET', url: `/api/links?codes=${a},${b.toUpperCase()},nothere` });
+    expect(res.statusCode).toBe(200);
+    const list = res.json();
+    // the one that doesn't exist is simply not there
+    expect(list.map((l: { code: string }) => l.code).sort()).toEqual([a, b].sort());
+    const first = list.find((l: { code: string }) => l.code === a);
+    expect(first.clicks).toBe(3);
+    expect(first.week).toHaveLength(7);
+    expect(first.week.at(-1)).toBe(3);
+    expect(first.ownerToken).toBeUndefined();
+    expect((await app.inject({ method: 'GET', url: '/api/links' })).statusCode).toBe(400);
+  });
+
   it('stats of a link that does not exist is a 404', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/links/nope123' })).statusCode).toBe(404);
   });
