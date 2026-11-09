@@ -6,11 +6,11 @@ A link shortener that also tells you who clicked: how many people, on which days
 
 Try it: **[trail-sfqz.onrender.com](https://trail-sfqz.onrender.com)** (free instance, the first visit after a while takes a few seconds to wake up).
 
-![The page: a field to paste a link, the short link that was just made, a table of your links with their clicks, and the numbers of one link with a chart of the last 30 days](docs/page.png)
+![The page: a field to paste a link, the short link that was just made, a table of your links with their clicks and a small bar chart of the last week, and the numbers of one link with a chart of the last 30 days](docs/page.png)
 
 I wanted something like short.io or Bitly to see how they work inside. Making the short link is the easy part. The interesting parts are the redirect, that has to be fast and can't wait on the database, and counting clicks without counting the wrong things.
 
-Work in progress. What works: making links (random or with a custom name), the redirect, the click counting, the stats page and a QR code for each link.
+Work in progress. What works: making links (random or with a custom name), the redirect, the click counting, the stats page, a QR code for each link, and changing or deleting a link later from the browser that made it.
 
 ## How it works
 
@@ -21,6 +21,11 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **Clicks don't slow the redirect.** They wait in memory and go to the database in batches: every 2 seconds or every 200 clicks, one `INSERT` for all of them (`unnest` of arrays) and one `UPDATE` for the totals. If the database is having a bad moment, a few clicks are lost but the redirects keep working.
 - **A limit against spam.** One IP can make 20 links every 10 minutes; after that it gets a 429 with how long to wait. A shortener without a limit becomes a free tool to hide spam links.
 - **Changing a link later, without accounts.** Making a link gives back a secret token, once, and the page keeps it in the browser. With it the link can point somewhere else (going through the same checks as a new one) or be turned off, which answers `410 Gone` with a page that says so, and stops counting. Only a SHA-256 of the token is stored and it's compared in constant time. The copy of the link kept in memory is dropped on every change, otherwise people would keep landing on the old address.
+- **Deleting.** With the same token, a link can also go for good, clicks and all (`ON DELETE CASCADE` takes its clicks and daily rows with it). The page asks once, in place, saying how many clicks go with it, instead of a pop-up. The name is free again afterwards, so `black-friday` can be made again next year. Clicks still waiting in memory for a link that was just deleted are skipped by the next batch instead of making the whole batch fail.
+
+<img src="docs/delete.png" alt="The page of a link with the question before deleting it: anyone who opens it will get not found, with 'Yes, delete it' and 'Keep it'" width="620">
+
+- **Your links in one request.** The list of links made in this browser asks for all of them at once (`GET /api/links?codes=a,b,c`), with each one's total and its clicks on each of the last 7 days, drawn as seven thin bars next to the number. Enough to see at a glance which links are still being used. A code that doesn't exist anymore just isn't in the answer, and the page drops it from the list.
 - **QR code.** Every link has one (`/api/links/{code}/qr.svg`), for a poster or the menu on a restaurant table. It holds the short link, not the long one, so the scans are counted like any other click.
 - **Hot links skip the database.** The last 1000 links used stay in memory, so a popular link is answered without a query.
 - **Only people count.** WhatsApp, Slack, Telegram and the like open the link to draw the preview card. That isn't a click, so user agents of bots, previews and scripts are left out. From each click it keeps the day, the site it came from (just `instagram.com`, not the whole address), the kind of device and the browser. No IP.
@@ -39,6 +44,8 @@ Works on a phone and follows the system's dark mode:
 |---|---|
 | `POST /api/links` | `{"url": "...", "alias": "optional"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
 | `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}` or `{"disabled": true}` → the link; 403 without the right token |
+| `DELETE /api/links/{code}` | same token → 204, the link and its clicks are gone |
+| `GET /api/links?codes=a,b,c` | up to 50 links at once, each with its total and `week` (clicks on each of the last 7 days); unknown codes are left out |
 | `GET /api/links/{code}` | the link, its total and the stats (`?days=` up to 90) |
 | `GET /api/links/{code}/qr.svg` | the QR code of the short link |
 | `GET /{code}` | the redirect (410 when the link is turned off) |
