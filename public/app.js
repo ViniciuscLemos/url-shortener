@@ -273,6 +273,8 @@ function showOwner(data) {
   ends.hidden = !data.expiresAt || data.disabled;
   if (data.expiresAt) {
     const when = new Date(data.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+    // an end still to come is just information; one that passed is a warning, like turned off
+    ends.className = data.expired ? 'off-note' : 'off-note is-info';
     ends.textContent = data.expired
       ? `Ended on ${when}: people who open it see a "this link has ended" page.`
       : `Works until the end of ${when}, then it stops on its own.`;
@@ -315,6 +317,24 @@ $('owner-ends').addEventListener('change', () => change({ expiresAt: $('owner-en
 $('ends-clear').addEventListener('click', (e) => { e.preventDefault(); change({ expiresAt: null }); });
 
 $('toggle-off').addEventListener('click', () => change({ disabled: !current.disabled }));
+
+// the token goes in a header, so the file is fetched here and handed to the browser as a download
+$('download-csv').addEventListener('click', async () => {
+  const error = $('owner-error');
+  error.hidden = true;
+  try {
+    const res = await fetch(`/api/links/${current.code}/clicks.csv`, { headers: { Authorization: `Bearer ${tokenOf(current.code)}` } });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || 'Could not get the file.');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(await res.blob());
+    link.download = `${current.code}-clicks.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+  }
+});
 
 // deleting asks once, in place, with the number of clicks that go with it
 $('delete-link').addEventListener('click', () => {
