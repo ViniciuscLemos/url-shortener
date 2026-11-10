@@ -10,7 +10,7 @@ Try it: **[trail-sfqz.onrender.com](https://trail-sfqz.onrender.com)** (free ins
 
 I wanted something like short.io or Bitly to see how they work inside. Making the short link is the easy part. The interesting parts are the redirect, that has to be fast and can't wait on the database, and counting clicks without counting the wrong things.
 
-Work in progress. What works: making links (random or with a custom name), the redirect, the click counting, the stats page, a QR code for each link, and changing or deleting a link later from the browser that made it.
+Work in progress. What works: making links (random or with a custom name), the redirect, the click counting, the stats page, a QR code for each link, changing or deleting a link later from the browser that made it, an end date, and every click as a CSV.
 
 ## How it works
 
@@ -24,6 +24,11 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **Deleting.** With the same token, a link can also go for good, clicks and all (`ON DELETE CASCADE` takes its clicks and daily rows with it). The page asks once, in place, saying how many clicks go with it, instead of a pop-up. The name is free again afterwards, so `black-friday` can be made again next year. Clicks still waiting in memory for a link that was just deleted are skipped by the next batch instead of making the whole batch fail.
 
 <img src="docs/delete.png" alt="The page of a link with the question before deleting it: anyone who opens it will get not found, with 'Yes, delete it' and 'Keep it'" width="620">
+
+- **An end date.** A link can be made to work until a date: the Black Friday link that shouldn't keep sending people to a sale that ended. A plain date means the end of that day in São Paulo, which is what people mean by "until the 1st". After it the link answers `410` with a page saying it ended, and stops counting. The date can be changed or cleared later, and the copy of the link kept in memory knows the date too, so a popular link doesn't keep working past it.
+- **Every click as a CSV.** The owner can download every click of a link (time, where from, device, browser) to open in a spreadsheet. The numbers page is public, the list of every visit isn't, so this one needs the token. A value starting with `=`, `+`, `-` or `@` gets a `'` in front, because a referrer can be anything someone sends and a spreadsheet would run it as a formula.
+
+<img src="docs/owner.png" alt="The page of a link with its end date, the field to send it somewhere else, the end date picker, turn off, every click as CSV and delete for good" width="620">
 
 - **Your links in one request.** The list of links made in this browser asks for all of them at once (`GET /api/links?codes=a,b,c`), with each one's total and its clicks on each of the last 7 days, drawn as seven thin bars next to the number. Enough to see at a glance which links are still being used. A code that doesn't exist anymore just isn't in the answer, and the page drops it from the list.
 - **QR code.** Every link has one (`/api/links/{code}/qr.svg`), for a poster or the menu on a restaurant table. It holds the short link, not the long one, so the scans are counted like any other click.
@@ -42,8 +47,9 @@ Works on a phone and follows the system's dark mode:
 
 | | |
 |---|---|
-| `POST /api/links` | `{"url": "...", "alias": "optional"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
-| `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}` or `{"disabled": true}` → the link; 403 without the right token |
+| `POST /api/links` | `{"url": "...", "alias": "optional", "expiresAt": "optional, 2026-12-01"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
+| `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}`, `{"disabled": true}` or `{"expiresAt": "..." / null}` → the link; 403 without the right token |
+| `GET /api/links/{code}/clicks.csv` | same token → every click as CSV |
 | `DELETE /api/links/{code}` | same token → 204, the link and its clicks are gone |
 | `GET /api/links?codes=a,b,c` | up to 50 links at once, each with its total and `week` (clicks on each of the last 7 days); unknown codes are left out |
 | `GET /api/links/{code}` | the link, its total and the stats (`?days=` up to 90) |
