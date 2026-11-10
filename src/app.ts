@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import type pg from 'pg';
 import { ClickQueue, browserOf, deviceOf, isBot, referrerOf } from './clicks.ts';
 import { RateLimit } from './limits.ts';
-import { checkAlias, checkUrl, randomCode } from './links.ts';
+import { checkAlias, checkExpiry, checkUrl, randomCode } from './links.ts';
 import { DEMO_LINKS } from './demo.ts';
 import { newOwnerToken, ownerMatches } from './owner.ts';
 import { linkStats } from './stats.ts';
@@ -21,6 +21,7 @@ interface Link {
   clicks: string;
   owner_token_hash: Buffer | null;
   disabled_at: Date | null;
+  expires_at: Date | null;
 }
 
 export interface Options {
@@ -39,8 +40,10 @@ export interface Options {
  * The most used links stay in memory, so a redirect usually doesn't touch the database.
  * A Map keeps insertion order: reading an entry moves it to the end, the oldest goes first.
  */
+interface Cached { id: number; url: string; expiresAt: number | null }
+
 class RecentLinks {
-  private map = new Map<string, { id: number; url: string }>();
+  private map = new Map<string, Cached>();
   constructor(private max = 1000) {}
 
   get(code: string) {
@@ -56,7 +59,7 @@ class RecentLinks {
     this.map.delete(code);
   }
 
-  set(code: string, link: { id: number; url: string }) {
+  set(code: string, link: Cached) {
     this.map.set(code, link);
     if (this.map.size > this.max) this.map.delete(this.map.keys().next().value!);
   }
@@ -78,6 +81,8 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     createdAt: link.created_at,
     clicks: Number(link.clicks),
     disabled: link.disabled_at != null,
+    expiresAt: link.expires_at,
+    expired: link.expires_at != null && link.expires_at.getTime() <= Date.now(),
   });
 
   app.register(fastifyStatic, { root: PUBLIC, prefix: '/assets/' });
@@ -91,7 +96,7 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
 
   app.get('/api/config', async () => ({ examples: options.demo ? DEMO_LINKS.map((l) => l.code) : [] }));
 
-  app.post<{ Body: { url?: unknown; alias?: unknown } }>('/api/links', async (req, reply) => {
+  app.post<{ Body: { url?: unknown; alias?: unknown; expiresAt?: unknown } }>('/api/links', async (req, reply) => {
     const wait = limit.take(req.ip);
     if (wait) {
       const minutes = Math.ceil(wait / 60_000);
@@ -101,14 +106,16 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     const body = req.body ?? {};
     const url = checkUrl(typeof body.url === 'string' ? body.url : '', ownHost);
     if (!url.ok) return reply.code(400).send({ error: url.error });
+    const expiry = checkExpiry(body.expiresAt);
+    if (!expiry.ok) return reply.code(400).send({ error: expiry.error });
     const owner = newOwnerToken();
 
     if (typeof body.alias === 'string' && body.alias.trim()) {
       const alias = checkAlias(body.alias);
       if (!alias.ok) return reply.code(400).send({ error: alias.error });
       const { rows } = await pool.query<Link>(
-        'INSERT INTO links (code, url, owner_token_hash) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING RETURNING *',
-        [alias.value, url.value, owner.hash],
+        'INSERT INTO links (code, url, owner_token_hash, expires_at) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING *',
+        [alias.value, url.value, owner.hash, expiry.value],
       );
       if (!rows[0]) return reply.code(409).send({ error: `"${alias.value}" is taken, try another name.` });
       return reply.code(201).send({ ...view(rows[0]), ownerToken: owner.token });
@@ -117,8 +124,8 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     // a collision among 34 billion codes is rare, but it's one line to try again
     for (let attempt = 0; attempt < 5; attempt++) {
       const { rows } = await pool.query<Link>(
-        'INSERT INTO links (code, url, owner_token_hash) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING RETURNING *',
-        [randomCode(), url.value, owner.hash],
+        'INSERT INTO links (code, url, owner_token_hash, expires_at) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING *',
+        [randomCode(), url.value, owner.hash, expiry.value],
       );
       if (rows[0]) return reply.code(201).send({ ...view(rows[0]), ownerToken: owner.token });
     }
@@ -158,7 +165,7 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
 
   // Change where a link goes, or turn it off and on. Only with the token given when it was
   // made: there are no accounts, the browser that made the link is the owner.
-  app.patch<{ Params: { code: string }; Body: { url?: unknown; disabled?: unknown } }>('/api/links/:code', async (req, reply) => {
+  app.patch<{ Params: { code: string }; Body: { url?: unknown; disabled?: unknown; expiresAt?: unknown } }>('/api/links/:code', async (req, reply) => {
     const code = req.params.code.toLowerCase();
     const { rows } = await pool.query<Link>('SELECT * FROM links WHERE code = $1', [code]);
     const link = rows[0];
@@ -178,8 +185,15 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
       if (typeof body.disabled !== 'boolean') return reply.code(400).send({ error: '"disabled" is true or false.' });
       disabledAt = body.disabled ? (link.disabled_at ?? new Date()) : null;
     }
+    let expiresAt = link.expires_at;
+    if (body.expiresAt !== undefined) {
+      const expiry = checkExpiry(body.expiresAt);
+      if (!expiry.ok) return reply.code(400).send({ error: expiry.error });
+      expiresAt = expiry.value;
+    }
     const updated = (await pool.query<Link>(
-      'UPDATE links SET url = $1, disabled_at = $2 WHERE id = $3 RETURNING *', [target, disabledAt, link.id])).rows[0]!;
+      'UPDATE links SET url = $1, disabled_at = $2, expires_at = $3 WHERE id = $4 RETURNING *',
+      [target, disabledAt, expiresAt, link.id])).rows[0]!;
     // the copy in memory would keep sending people to the old address
     recent.forget(code);
     return view(updated);
@@ -216,13 +230,17 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     const code = req.params.code.toLowerCase();
     let link = recent.get(code);
     if (!link) {
-      const { rows } = await pool.query<{ id: string; url: string; disabled_at: Date | null }>(
-        'SELECT id, url, disabled_at FROM links WHERE code = $1', [code]);
+      const { rows } = await pool.query<{ id: string; url: string; disabled_at: Date | null; expires_at: Date | null }>(
+        'SELECT id, url, disabled_at, expires_at FROM links WHERE code = $1', [code]);
       if (!rows[0]) return reply.code(404).type('text/html').send(notFoundPage(baseUrl));
       // turned off: 410 Gone, and not kept in memory, so turning it back on works right away
       if (rows[0].disabled_at) return reply.code(410).type('text/html').send(offPage(baseUrl));
-      link = { id: Number(rows[0].id), url: rows[0].url };
+      link = { id: Number(rows[0].id), url: rows[0].url, expiresAt: rows[0].expires_at?.getTime() ?? null };
       recent.set(code, link);
+    }
+    // past its end date: gone, and no click counted. The copy in memory knows the date too
+    if (link.expiresAt != null && Date.now() >= link.expiresAt) {
+      return reply.code(410).type('text/html').send(expiredPage(baseUrl));
     }
 
     const ua = req.headers['user-agent'];
@@ -246,6 +264,13 @@ function notFoundPage(baseUrl: string): string {
 <title>Link not found</title><link rel="stylesheet" href="/assets/styles.css"></head>
 <body><main class="wrap missing"><p class="kicker">404</p><h1>This short link doesn't exist.</h1>
 <p>It may have been typed wrong. <a href="${baseUrl}/">Make a new one</a></p></main></body></html>`;
+}
+
+function expiredPage(baseUrl: string): string {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link ended</title><link rel="stylesheet" href="/assets/styles.css"></head>
+<body><main class="wrap missing"><p class="kicker">410</p><h1>This short link has ended.</h1>
+<p>It was made to work until a date, and that date has passed. <a href="${baseUrl}/">Make your own</a></p></main></body></html>`;
 }
 
 function offPage(baseUrl: string): string {

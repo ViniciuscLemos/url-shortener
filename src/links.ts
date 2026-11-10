@@ -51,3 +51,17 @@ export function checkUrl(text: string, ownHost: string): Check<string> {
   if (url.host === ownHost) return { ok: false, error: "That's already a short link from here." };
   return { ok: true, value: url.href };
 }
+
+const MAX_AHEAD = 2 * 365 * 24 * 3600_000;
+
+/** When the link stops working: a future moment up to two years ahead, or null for never. */
+export function checkExpiry(value: unknown, now = new Date()): { ok: true; value: Date | null } | { ok: false; error: string } {
+  if (value === null || value === undefined || value === '') return { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false, error: 'The end date is a date like 2026-12-01 or an ISO time.' };
+  // a plain date means the end of that day in São Paulo, which is how people think about "until the 1st"
+  const at = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T23:59:59-03:00`) : new Date(value);
+  if (Number.isNaN(at.getTime())) return { ok: false, error: 'The end date is a date like 2026-12-01 or an ISO time.' };
+  if (at.getTime() <= now.getTime()) return { ok: false, error: 'The end date has to be in the future.' };
+  if (at.getTime() - now.getTime() > MAX_AHEAD) return { ok: false, error: 'The end date can be at most two years ahead.' };
+  return { ok: true, value: at };
+}

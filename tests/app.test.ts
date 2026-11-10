@@ -103,6 +103,35 @@ describe('changing a link later', () => {
     expect((await app.inject({ method: 'GET', url: `/api/links/${b.code}` })).json().clicks).toBe(1);
   });
 
+  it('a link with an end date stops on its own, and the date can change', async () => {
+    const soon = new Date(Date.now() + 60_000).toISOString();
+    const link = (await shorten({ url: 'https://sale.example.com', expiresAt: soon })).json();
+    expect(link.expiresAt).toBe(soon);
+    expect(link.expired).toBe(false);
+    expect((await visit(link.code)).statusCode).toBe(302);
+    // moved to the past by hand, like the date arriving: the copy in memory has to see it too
+    await db.pool.query("UPDATE links SET expires_at = now() - interval '1 second' WHERE code = $1", [link.code]);
+    await change(link.code, { expiresAt: null }, link.ownerToken);
+    expect((await visit(link.code)).statusCode).toBe(302);
+    await db.pool.query("UPDATE links SET expires_at = now() - interval '1 second' WHERE code = $1", [link.code]);
+    await change(link.code, { url: 'https://sale.example.com/' }, link.ownerToken);
+    const gone = await visit(link.code);
+    expect(gone.statusCode).toBe(410);
+    expect(gone.body).toContain('has ended');
+    await app.clicks.flush();
+    expect((await app.inject({ method: 'GET', url: `/api/links/${link.code}` })).json()).toMatchObject({ clicks: 2, expired: true });
+  });
+
+  it('the end date has to make sense', async () => {
+    expect((await shorten({ url: 'https://a.example.com', expiresAt: '2020-01-01' })).statusCode).toBe(400);
+    expect((await shorten({ url: 'https://a.example.com', expiresAt: 'friday' })).statusCode).toBe(400);
+    expect((await shorten({ url: 'https://a.example.com', expiresAt: '2099-01-01' })).statusCode).toBe(400);
+    // a plain date runs until the end of that day in São Paulo
+    const day = new Date(Date.now() + 5 * 864e5).toISOString().slice(0, 10);
+    const ok = (await shorten({ url: 'https://a.example.com', expiresAt: day })).json();
+    expect(new Date(ok.expiresAt).toISOString()).toBe(new Date(`${day}T23:59:59-03:00`).toISOString());
+  });
+
   it('the new address goes through the same checks', async () => {
     const link = (await shorten({ url: 'https://example.com' })).json();
     expect((await change(link.code, { url: 'javascript:alert(1)' }, link.ownerToken)).statusCode).toBe(400);
