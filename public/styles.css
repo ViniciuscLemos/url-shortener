@@ -156,3 +156,9 @@ tr.is-off .code { text-decoration: line-through; }
 .sure span { flex-basis: 100%; }
 .ghost.danger { color: #b3261e; border-color: currentColor; }
 @media (prefers-color-scheme: dark) { .link-danger, .ghost.danger { color: #ff8a80; } .sure { border-left-color: #ff8a80; } }
+
+.ends { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.ends input, .ends-edit input { font: inherit; font-size: 0.9rem; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; padding: 2px 0; }
+.ends input:focus, .ends-edit input:focus { outline: none; border-bottom-color: var(--accent); }
+.ends-edit { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+@media (max-width: 640px) { .ends { margin-left: 0; } }

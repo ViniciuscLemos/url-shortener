@@ -28,6 +28,7 @@
       <div class="alias-row">
         <label for="alias">Custom name <span class="muted">(optional)</span></label>
         <span class="alias-input"><span class="prefix" id="prefix"></span><input id="alias" name="alias" maxlength="32" autocomplete="off" spellcheck="false" placeholder="black-friday"></span>
+        <label class="ends" for="ends">Works until <span class="muted">(optional)</span> <input id="ends" name="ends" type="date"></label>
       </div>
       <p class="error" id="error" role="alert" hidden></p>
     </form>
@@ -64,6 +65,7 @@
       </div>
       <p class="dest" id="stats-dest"></p>
       <p class="off-note" id="stats-off" hidden>Turned off: people who open it see a "this link was turned off" page.</p>
+      <p class="off-note" id="stats-ends" hidden></p>
       <div class="owner" id="owner" hidden>
         <form id="redirect-form" class="redirect-form" novalidate>
           <label for="new-url">Send it somewhere else</label>
@@ -73,7 +75,8 @@
           </div>
         </form>
         <div class="owner-actions">
-          <button type="button" class="ghost small" id="toggle-off">Turn off</button>
+          <label class="ends-edit">Works until <input id="owner-ends" type="date"> <button type="button" class="link-plain" id="ends-clear">no end date</button></label>
+        <button type="button" class="ghost small" id="toggle-off">Turn off</button>
           <button type="button" class="link-danger" id="delete-link">Delete for good</button>
         </div>
         <p class="sure" id="delete-sure" hidden>

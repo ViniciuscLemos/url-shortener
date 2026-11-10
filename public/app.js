@@ -68,7 +68,7 @@ $('shorten').addEventListener('submit', async (event) => {
     const link = await api('/api/links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: $('url').value, alias: $('alias').value }),
+      body: JSON.stringify({ url: $('url').value, alias: $('alias').value, expiresAt: $('ends').value || undefined }),
     });
     // the owner token comes only in this answer: it's what lets this browser change the link later
     save([{ code: link.code, url: link.url, createdAt: link.createdAt, token: link.ownerToken },
@@ -76,6 +76,7 @@ $('shorten').addEventListener('submit', async (event) => {
     showResult(link);
     $('url').value = '';
     $('alias').value = '';
+    $('ends').value = '';
     renderLinks();
   } catch (err) {
     error.textContent = err.message;
@@ -146,8 +147,9 @@ async function renderLinks() {
     }
     clicks.replaceChildren(week(data.week), el('span', {}, data.clicks.toLocaleString('en-US')));
     row.children[1].textContent = plain(data.url);
-    row.classList.toggle('is-off', data.disabled);
     if (data.disabled) row.children[3].textContent = 'turned off';
+    else if (data.expired) row.children[3].textContent = 'ended';
+    row.classList.toggle('is-off', data.disabled || data.expired);
   }
 }
 
@@ -265,6 +267,16 @@ function showOwner(data) {
   $('owner').hidden = !tokenOf(data.code);
   $('owner-error').hidden = true;
   $('delete-sure').hidden = true;
+  $('owner-ends').value = data.expiresAt ? localDay(data.expiresAt) : '';
+  $('ends-clear').hidden = !data.expiresAt;
+  const ends = $('stats-ends');
+  ends.hidden = !data.expiresAt || data.disabled;
+  if (data.expiresAt) {
+    const when = new Date(data.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+    ends.textContent = data.expired
+      ? `Ended on ${when}: people who open it see a "this link has ended" page.`
+      : `Works until the end of ${when}, then it stops on its own.`;
+  }
   $('new-url').value = data.url;
   $('toggle-off').textContent = data.disabled ? 'Turn it back on' : 'Turn off';
 }
@@ -279,6 +291,7 @@ async function change(body) {
       body: JSON.stringify(body),
     });
     save(saved().map((l) => (l.code === data.code ? { ...l, url: data.url } : l)));
+    $('stats-off').hidden = !data.disabled;
     $('stats-dest').textContent = `→ ${data.url}`;
     showOwner({ ...current, ...data });
     renderLinks();
@@ -292,6 +305,14 @@ $('redirect-form').addEventListener('submit', (event) => {
   event.preventDefault();
   if ($('new-url').value.trim() && $('new-url').value.trim() !== current.url) change({ url: $('new-url').value });
 });
+
+// the day in São Paulo, which is how the end date was picked
+function localDay(iso) {
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+$('owner-ends').addEventListener('change', () => change({ expiresAt: $('owner-ends').value || null }));
+$('ends-clear').addEventListener('click', (e) => { e.preventDefault(); change({ expiresAt: null }); });
 
 $('toggle-off').addEventListener('click', () => change({ disabled: !current.disabled }));
 
@@ -326,6 +347,8 @@ $('stats-close').addEventListener('click', () => {
   $('stats').hidden = true;
   for (const tr of $('links').children) tr.setAttribute('aria-selected', 'false');
 });
+
+for (const id of ['ends', 'owner-ends']) $(id).min = localDay(new Date().toISOString());
 
 let examples = [];
 api('/api/config').then((config) => { examples = config.examples; }).catch(() => {}).finally(renderLinks);
