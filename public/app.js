@@ -157,7 +157,7 @@ async function renderLinks() {
 function week(days) {
   const top = Math.max(...days, 1);
   const total = days.reduce((a, b) => a + b, 0);
-  const box = el('span', { class: 'week', title: `${total} in the last 7 days`, 'aria-label': `${total} clicks in the last 7 days` });
+  const box = el('span', { class: 'week', role: 'img', title: `${total} in the last 7 days`, 'aria-label': `${total} clicks in the last 7 days` });
   for (const n of days) {
     const bar = el('i', {});
     bar.style.height = `${n ? Math.max(2, Math.round((n / top) * 14)) : 1}px`;
