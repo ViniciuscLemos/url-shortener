@@ -199,6 +199,31 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     return view(updated);
   });
 
+  // Every click of a link as a CSV, to open in a spreadsheet: when (in the stats timezone),
+  // where from, the device and the browser. Owner only, like changing it: the page of numbers
+  // is public, but the list of every single visit is the owner's business.
+  app.get<{ Params: { code: string } }>('/api/links/:code/clicks.csv', async (req, reply) => {
+    const code = req.params.code.toLowerCase();
+    const { rows } = await pool.query<Link>('SELECT * FROM links WHERE code = $1', [code]);
+    const link = rows[0];
+    if (!link) return reply.code(404).send({ error: 'No short link with this name.' });
+    if (!ownerMatches(req.headers.authorization, link.owner_token_hash)) {
+      return reply.code(403).send({ error: 'Only the browser that made this link can download its clicks.' });
+    }
+    await clicks.flush();
+    const list = await pool.query<{ at: string; referrer: string | null; device: string; browser: string }>(
+      `SELECT to_char(clicked_at AT TIME ZONE $2, 'YYYY-MM-DD HH24:MI:SS') AS at, referrer, device, browser
+       FROM clicks WHERE link_id = $1 ORDER BY clicked_at`,
+      [link.id, options.timezone ?? 'America/Sao_Paulo'],
+    );
+    const lines = ['time,from,device,browser', ...list.rows.map((r) =>
+      [r.at, r.referrer ?? 'direct', r.device, r.browser].map(csvCell).join(','))];
+    return reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${code}-clicks.csv"`)
+      .send(lines.join('\r\n') + '\r\n');
+  });
+
   // Deleting for good, clicks and all. Same token as changing it. The name is free again
   // afterwards, so "black-friday" can be made again next year.
   app.delete<{ Params: { code: string } }>('/api/links/:code', async (req, reply) => {
@@ -264,6 +289,13 @@ function notFoundPage(baseUrl: string): string {
 <title>Link not found</title><link rel="stylesheet" href="/assets/styles.css"></head>
 <body><main class="wrap missing"><p class="kicker">404</p><h1>This short link doesn't exist.</h1>
 <p>It may have been typed wrong. <a href="${baseUrl}/">Make a new one</a></p></main></body></html>`;
+}
+
+// quotes around anything with a comma or a quote, and a leading = + - @ neutralized so a
+// spreadsheet doesn't run it as a formula (a referrer can be anything someone sends)
+function csvCell(value: string): string {
+  const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
 function expiredPage(baseUrl: string): string {

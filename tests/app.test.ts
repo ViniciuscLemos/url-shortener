@@ -122,6 +122,24 @@ describe('changing a link later', () => {
     expect((await app.inject({ method: 'GET', url: `/api/links/${link.code}` })).json()).toMatchObject({ clicks: 2, expired: true });
   });
 
+  it('the owner downloads every click as a CSV', async () => {
+    const link = (await shorten({ url: 'https://example.com' })).json();
+    await visit(link.code, { 'user-agent': CHROME_PHONE, referer: 'https://www.instagram.com/p/1' });
+    await visit(link.code);
+    const csv = (token?: string) => app.inject({
+      method: 'GET', url: `/api/links/${link.code}/clicks.csv`, headers: token ? { authorization: `Bearer ${token}` } : {},
+    });
+    expect((await csv()).statusCode).toBe(403);
+    const res = await csv(link.ownerToken);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/csv');
+    const lines = res.body.trim().split('\r\n');
+    expect(lines[0]).toBe('time,from,device,browser');
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},instagram\.com,phone,Chrome$/);
+    expect(lines[2]).toContain(',direct,computer,Firefox');
+  });
+
   it('the end date has to make sense', async () => {
     expect((await shorten({ url: 'https://a.example.com', expiresAt: '2020-01-01' })).statusCode).toBe(400);
     expect((await shorten({ url: 'https://a.example.com', expiresAt: 'friday' })).statusCode).toBe(400);
