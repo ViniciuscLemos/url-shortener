@@ -43,6 +43,13 @@ Works on a phone and follows the system's dark mode:
   <img src="docs/page-dark.png" alt="The page in dark mode" width="520">
 </p>
 
+## On a phone and with a screen reader
+
+- Nothing is wider than a 375px screen, the new-link box and the owner buttons included.
+- Fields are 16px on touch screens so iOS doesn't zoom in.
+- The orange used for small text and errors is dark enough to read (4.5:1), and the little seven-day bars in the list have a name a screen reader can say.
+- Checked with axe in light and dark mode.
+
 ## API
 
 | | |
