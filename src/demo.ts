@@ -2,6 +2,15 @@ import type pg from 'pg';
 
 // a few links with a month of clicks, so the stats have something to show. Used by
 // `npm run demo` and by the public demo (DEMO_SEED=true)
+
+// how busy each hour of the day is, São Paulo time
+const HOURS = [1, 0.5, 0.3, 0.2, 0.2, 0.4, 1, 2, 3, 3, 3, 3.5, 5, 4.5, 3, 3, 3, 3.5, 4.5, 6, 7, 6.5, 5, 2.5];
+function pickHour(random: () => number): number {
+  let r = random() * HOURS.reduce((s, n) => s + n, 0);
+  for (let h = 0; h < 24; h++) { r -= HOURS[h]!; if (r <= 0) return h; }
+  return 23;
+}
+
 export const DEMO_LINKS = [
   { code: 'black-friday', url: 'https://www.example-store.com.br/promocoes/black-friday-2026?utm_source=instagram&utm_medium=bio', perDay: 40 },
   { code: 'cardapio', url: 'https://docs.example.com/cardapio-novembro-2026.pdf', perDay: 12 },
@@ -39,7 +48,10 @@ export async function seedDemo(pool: pg.Pool): Promise<boolean> {
       const spike = day >= 12 && day <= 14 ? 3 : 1;
       const count = Math.round(link.perDay * spike * (weekend ? 0.6 : 1) * (0.5 + random()));
       for (let i = 0; i < count; i++) {
-        const at = new Date(date.getTime() - random() * 12 * 3_600_000);
+        // a time of day the way people click: little at night, a bump at lunch, most in the evening
+        const day0 = new Date(`${new Date(date.getTime() - 3 * 3_600_000).toISOString().slice(0, 10)}T00:00:00-03:00`);
+        let at = new Date(day0.getTime() + (pickHour(random) + random()) * 3_600_000);
+        if (at.getTime() > Date.now()) at = new Date(Date.now() - random() * 3_600_000);
         const [referrer] = pick(REFERRERS);
         const [device, browser] = pick(SETUPS);
         clicks.push([id, at, referrer, device, browser]);
