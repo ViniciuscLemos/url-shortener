@@ -39,6 +39,17 @@
         <span class="alias-input"><span class="prefix" id="prefix"></span><input id="alias" name="alias" maxlength="32" autocomplete="off" spellcheck="false" placeholder="black-friday"></span>
         <label class="ends" for="ends">Works until <span class="muted">(optional)</span> <input id="ends" name="ends" type="date"></label>
       </div>
+      <details class="utm" id="utm">
+        <summary>Campaign tags <span class="muted">(UTM, for Google Analytics)</span></summary>
+        <div class="utm-fields">
+          <label>Where it's posted <input id="utm-source" list="utm-sources" placeholder="instagram" autocomplete="off" spellcheck="false"></label>
+          <label>What kind <input id="utm-medium" list="utm-mediums" placeholder="social" autocomplete="off" spellcheck="false"></label>
+          <label>Campaign <input id="utm-campaign" placeholder="black-friday-2026" autocomplete="off" spellcheck="false"></label>
+        </div>
+        <datalist id="utm-sources"><option value="instagram"><option value="whatsapp"><option value="linkedin"><option value="facebook"><option value="newsletter"><option value="qr"></datalist>
+        <datalist id="utm-mediums"><option value="social"><option value="email"><option value="bio"><option value="print"><option value="paid"></datalist>
+        <p class="utm-preview muted" id="utm-preview" aria-live="polite"></p>
+      </details>
       <p class="error" id="error" role="alert" hidden></p>
     </form>
 

@@ -58,6 +58,31 @@ function ago(iso) {
 
 $('prefix').textContent = `${host}/`;
 
+// Campaign tags go on the long link before it's shortened, so Google Analytics on the other
+// side knows the visit came from, say, the Instagram bio. Tags already in the link are
+// replaced, the rest of it is left as it is; empty fields add nothing.
+function withUtm(raw) {
+  const tags = [['utm_source', 'utm-source'], ['utm_medium', 'utm-medium'], ['utm_campaign', 'utm-campaign']]
+    .map(([name, id]) => [name, $(id).value.trim().toLowerCase().replace(/\s+/g, '-')])
+    .filter(([, value]) => value);
+  if (!tags.length || !raw.trim()) return raw;
+  let url;
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw.trim()) ? raw.trim() : `https://${raw.trim()}`);
+  } catch {
+    return raw; // the server says what's wrong with it
+  }
+  for (const [name, value] of tags) url.searchParams.set(name, value);
+  return url.toString();
+}
+
+for (const id of ['url', 'utm-source', 'utm-medium', 'utm-campaign']) {
+  $(id).addEventListener('input', () => {
+    const tagged = withUtm($('url').value);
+    $('utm-preview').textContent = tagged !== $('url').value ? `It will point to ${tagged}` : '';
+  });
+}
+
 $('shorten').addEventListener('submit', async (event) => {
   event.preventDefault();
   const error = $('error');
@@ -68,7 +93,7 @@ $('shorten').addEventListener('submit', async (event) => {
     const link = await api('/api/links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: $('url').value, alias: $('alias').value, expiresAt: $('ends').value || undefined }),
+      body: JSON.stringify({ url: withUtm($('url').value), alias: $('alias').value, expiresAt: $('ends').value || undefined }),
     });
     // the owner token comes only in this answer: it's what lets this browser change the link later
     save([{ code: link.code, url: link.url, createdAt: link.createdAt, token: link.ownerToken },

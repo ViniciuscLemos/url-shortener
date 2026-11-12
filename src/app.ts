@@ -259,8 +259,11 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
       return reply.type('image/png').send(await QRCode.toBuffer(url, { ...options, type: 'png', width: size }));
     });
 
+  // a + at the end (trail.app/abc+) shows where the link goes instead of going there, for
+  // whoever wants to look before clicking. No click is counted
   app.get<{ Params: { code: string } }>('/:code', async (req, reply) => {
-    const code = req.params.code.toLowerCase();
+    const preview = req.params.code.endsWith('+');
+    const code = (preview ? req.params.code.slice(0, -1) : req.params.code).toLowerCase();
     let link = recent.get(code);
     if (!link) {
       const { rows } = await pool.query<{ id: string; url: string; disabled_at: Date | null; expires_at: Date | null }>(
@@ -275,6 +278,7 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     if (link.expiresAt != null && Date.now() >= link.expiresAt) {
       return reply.code(410).type('text/html').send(expiredPage(baseUrl));
     }
+    if (preview) return reply.type('text/html').header('Cache-Control', 'private, max-age=0').send(previewPage(baseUrl, code, link.url));
 
     const ua = req.headers['user-agent'];
     if (!isBot(ua)) {
@@ -318,4 +322,17 @@ function offPage(baseUrl: string): string {
 <title>Link turned off</title><link rel="stylesheet" href="/assets/styles.css"></head>
 <body><main class="wrap missing"><p class="kicker">410</p><h1>This short link was turned off.</h1>
 <p>Whoever made it switched it off, so it doesn't lead anywhere for now. <a href="${baseUrl}/">Make your own</a></p></main></body></html>`;
+}
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+function previewPage(baseUrl: string, code: string, url: string): string {
+  const host = new URL(url).hostname.replace(/^www\./, '');
+  const shortHost = new URL(baseUrl).host;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Where ${escapeHtml(shortHost)}/${escapeHtml(code)} goes</title><link rel="stylesheet" href="/assets/styles.css"></head>
+<body><main class="wrap missing preview"><p class="kicker">${escapeHtml(shortHost)}/${escapeHtml(code)} goes to</p>
+<h1>${escapeHtml(host)}</h1><p class="preview-url">${escapeHtml(url)}</p>
+<p><a class="go preview-go" href="${escapeHtml(url)}" rel="noopener noreferrer">Go there</a></p>
+<p class="muted">You're seeing this because the link ended in +. Without it, it takes you straight there.</p></main></body></html>`;
 }

@@ -232,6 +232,21 @@ describe('making links', () => {
     await demo.close();
   });
 
+  it('a + at the end shows where it goes, without counting a click', async () => {
+    const { code } = (await shorten({ url: 'https://www.example.com/promo?a=1&b=<2>' })).json();
+    const res = await visit(`${code}+`, { 'user-agent': CHROME_PHONE });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.body).toContain('<h1>example.com</h1>');
+    // the long link is escaped, not pasted into the page as it is
+    expect(res.body).toContain('promo?a=1&amp;b=');
+    expect(res.body).not.toContain('<2>');
+    expect((await visit(`${code.toUpperCase()}+`)).statusCode).toBe(200);
+    expect((await visit('nothere+')).statusCode).toBe(404);
+    await app.clicks.flush();
+    expect((await app.inject({ method: 'GET', url: `/api/links/${code}` })).json().clicks).toBe(0);
+  });
+
   it('unknown codes get a 404 page', async () => {
     const res = await visit('nothere');
     expect(res.statusCode).toBe(404);
