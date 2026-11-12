@@ -245,6 +245,8 @@ describe('counting clicks', () => {
     expect(stats.total).toBe(3);
     expect(stats.days).toHaveLength(30);
     expect(stats.days.at(-1).clicks).toBe(3);
+    expect(stats.hours).toHaveLength(24);
+    expect(stats.hours.reduce((s: number, n: number) => s + n, 0)).toBe(3);
     expect(stats.days.slice(0, -1).every((d: { clicks: number }) => d.clicks === 0)).toBe(true);
     expect(stats.referrers).toEqual([{ name: 'instagram.com', clicks: 2 }, { name: 'direct', clicks: 1 }]);
     expect(stats.devices).toEqual([{ name: 'phone', clicks: 2 }, { name: 'computer', clicks: 1 }]);

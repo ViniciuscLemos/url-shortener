@@ -3,6 +3,8 @@ import type pg from 'pg';
 export interface Stats {
   total: number;
   days: { day: string; clicks: number }[];
+  // the 24 hours of the day (in the stats timezone), so you know when to post the link
+  hours: number[];
   referrers: { name: string; clicks: number }[];
   devices: { name: string; clicks: number }[];
   browsers: { name: string; clicks: number }[];
@@ -16,7 +18,7 @@ export interface Stats {
  */
 export async function linkStats(pool: pg.Pool, linkId: number, total: number, days = 30, tz = 'America/Sao_Paulo'): Promise<Stats> {
   const since = `now() - make_interval(days => $2)`;
-  const [perDay, referrers, devices, browsers] = await Promise.all([
+  const [perDay, perHour, referrers, devices, browsers] = await Promise.all([
     // one row per day from link_days (kept by each batch of clicks), and generate_series
     // fills the days without clicks with 0, so the chart has no holes
     pool.query<{ day: string; clicks: string }>(
@@ -26,6 +28,14 @@ export async function linkStats(pool: pg.Pool, linkId: number, total: number, da
        ORDER BY d.day`,
       [linkId, days, tz],
     ),
+    pool.query<{ hour: number; clicks: string }>(
+      `SELECT h.hour, count(c.id) AS clicks
+       FROM generate_series(0, 23) AS h(hour)
+       LEFT JOIN clicks c ON c.link_id = $1 AND c.clicked_at > ${since}
+         AND extract(hour FROM c.clicked_at AT TIME ZONE $3) = h.hour
+       GROUP BY h.hour ORDER BY h.hour`,
+      [linkId, days, tz],
+    ),
     top(pool, `COALESCE(referrer, 'direct')`, linkId, days, since),
     top(pool, 'device', linkId, days, since),
     top(pool, 'browser', linkId, days, since),
@@ -33,6 +43,7 @@ export async function linkStats(pool: pg.Pool, linkId: number, total: number, da
   return {
     total,
     days: perDay.rows.map((r) => ({ day: r.day, clicks: Number(r.clicks) })),
+    hours: perHour.rows.map((r) => Number(r.clicks)),
     referrers: referrers,
     devices,
     browsers,
