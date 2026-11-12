@@ -181,7 +181,7 @@ async function openStats(code) {
   $('stats-title').textContent = `${host}/${data.code}`;
   $('stats-dest').textContent = `→ ${data.url}`;
   showOwner(data);
-  setQr($('stats-qr'), data.code);
+  setQr($('stats-qr'), data.code, qrColorPicked());
   $('stats-total').textContent = stats.total.toLocaleString('en-US');
   $('stats-week').textContent = stats.days.slice(-7).reduce((sum, d) => sum + d.clicks, 0).toLocaleString('en-US');
   drawChart(stats.days);
@@ -195,13 +195,30 @@ async function openStats(code) {
 }
 
 // the same image works to look at and to download (a file named after the link)
-function setQr(link, code) {
-  const src = `/api/links/${encodeURIComponent(code)}/qr.svg`;
-  link.href = src;
+function setQr(link, code, color = '161513') {
+  const base = `/api/links/${encodeURIComponent(code)}/qr`;
+  const tint = color === '161513' ? '' : `?color=${color}`;
+  link.href = `${base}.svg${tint}`;
   link.download = `trail-${code}.svg`;
-  link.querySelector('img').src = src;
+  link.querySelector('img').src = `${base}.svg${tint}`;
   link.querySelector('img').alt = `QR code for ${host}/${code}`;
+  if (link.id === 'stats-qr') {
+    $('qr-png').href = `${base}.png${tint ? `${tint}&` : '?'}size=1200`;
+    $('qr-png').download = `trail-${code}.png`;
+  }
 }
+
+// the color of the QR in the stats: picked once, kept for the next links in this browser
+function qrColorPicked() {
+  try { return localStorage.getItem('trail.qrColor') || '161513'; } catch { return '161513'; }
+}
+document.querySelectorAll('input[name=qr-color]').forEach((radio) => {
+  radio.checked = radio.value === qrColorPicked();
+  radio.addEventListener('change', () => {
+    try { localStorage.setItem('trail.qrColor', radio.value); } catch { /* fine, just not kept */ }
+    if (current) setQr($('stats-qr'), current.code, radio.value);
+  });
+});
 
 function drawChart(days) {
   const svg = $('chart');

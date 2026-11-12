@@ -67,7 +67,7 @@ a { color: inherit; }
 .qr { display: flex; flex-direction: column; align-items: center; gap: 4px; text-decoration: none; color: var(--muted); font-size: 0.8rem; flex-shrink: 0; }
 .qr img { display: block; border: 1px solid var(--line); border-radius: 3px; background: #fff; }
 .qr:hover span { color: var(--ink); text-decoration: underline; }
-.stats-top .stats-qr { order: 3; margin-left: auto; }
+.stats-top .qr-box { order: 3; margin-left: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .result { display: flex; gap: 20px; align-items: center; justify-content: space-between; margin: 24px 0 0; padding: 18px 20px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 4px; }
 .label { margin: 0 0 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
 .result-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -136,7 +136,7 @@ tr.is-off .week { display: none; }
   .stats { padding: 18px; }
   .result { flex-direction: column; align-items: flex-start; }
   .result-main { width: 100%; }
-  .stats-top .stats-qr { margin-left: 0; }
+  .stats-top .qr-box { margin-left: 0; align-items: flex-start; }
 }
 
 /* changing a link, for the browser that made it */
@@ -185,3 +185,13 @@ tr.is-off .code { text-decoration: line-through; }
 .hour-bars { list-style: none; margin: 8px 0 0; padding: 0; height: 64px; display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; border-bottom: 1px solid var(--line); }
 .hour-bars li { height: var(--h); background: var(--ink); opacity: .7; border-radius: 1px 1px 0 0; }
 .hour-bars li.zero { opacity: .15; }
+
+/* five colors for the QR; the swatch is the radio's look, the radio itself stays for the keyboard */
+.qr-colors { border: 0; margin: 0; padding: 0; display: flex; gap: 6px; }
+.qr-colors label { position: relative; cursor: pointer; }
+.qr-colors input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.qr-colors label > span:first-of-type { display: block; width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line); }
+.qr-colors input:checked + span { box-shadow: 0 0 0 2px var(--ink); }
+.qr-colors input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+.qr-png { font-size: 0.8rem; }
+@media (pointer: coarse) { .qr-colors { gap: 12px; } .qr-colors label > span:first-of-type { width: 24px; height: 24px; } }

@@ -97,7 +97,18 @@
         <p class="error" id="owner-error" role="alert" hidden></p>
       </div>
       <div class="stats-top">
-        <a class="qr stats-qr" id="stats-qr" download title="Download the QR code"><img alt="" width="96" height="96"><span>Download QR</span></a>
+        <div class="qr-box">
+          <a class="qr stats-qr" id="stats-qr" download title="Download the QR code"><img alt="" width="96" height="96"><span>Download SVG</span></a>
+          <fieldset class="qr-colors">
+            <legend class="sr-only">Color of the QR code</legend>
+          <label title="Black"><input type="radio" name="qr-color" value="161513" checked><span style="background:#161513"></span><span class="sr-only">Black</span></label>
+          <label title="Green"><input type="radio" name="qr-color" value="1a6b4c"><span style="background:#1a6b4c"></span><span class="sr-only">Green</span></label>
+          <label title="Blue"><input type="radio" name="qr-color" value="1f4e8c"><span style="background:#1f4e8c"></span><span class="sr-only">Blue</span></label>
+          <label title="Red"><input type="radio" name="qr-color" value="a3271f"><span style="background:#a3271f"></span><span class="sr-only">Red</span></label>
+          <label title="Purple"><input type="radio" name="qr-color" value="5b3f8c"><span style="background:#5b3f8c"></span><span class="sr-only">Purple</span></label>
+          </fieldset>
+          <a class="link-plain qr-png" id="qr-png" download>PNG for print</a>
+        </div>
         <div class="big">
           <span class="big-number" id="stats-total"></span>
           <span class="muted">clicks in total</span>
