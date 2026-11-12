@@ -179,3 +179,9 @@ tr.is-off .code { text-decoration: line-through; }
 }
 
 .noscript { max-width: 560px; margin: 40px auto; padding: 14px 18px; border-left: 3px solid currentColor; font: 16px/1.5 system-ui, sans-serif; }
+
+/* the 24 hours: a thin bar each, the height set from the script */
+.hours { margin: 26px 0 0; }
+.hour-bars { list-style: none; margin: 8px 0 0; padding: 0; height: 64px; display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; border-bottom: 1px solid var(--line); }
+.hour-bars li { height: var(--h); background: var(--ink); opacity: .7; border-radius: 1px 1px 0 0; }
+.hour-bars li.zero { opacity: .15; }

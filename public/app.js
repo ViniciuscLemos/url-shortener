@@ -185,6 +185,7 @@ async function openStats(code) {
   $('stats-total').textContent = stats.total.toLocaleString('en-US');
   $('stats-week').textContent = stats.days.slice(-7).reduce((sum, d) => sum + d.clicks, 0).toLocaleString('en-US');
   drawChart(stats.days);
+  drawHours(stats.hours);
   bars('referrers', stats.referrers, (name) => (name === 'direct' ? 'Direct or app' : name));
   bars('devices', stats.devices, (name) => name[0].toUpperCase() + name.slice(1));
   bars('browsers', stats.browsers, (name) => name);
@@ -236,6 +237,29 @@ function drawChart(days) {
   $('chart-label').textContent = `Clicks per day for the last 30 days. Busiest day: ${best.day} with ${best.clicks}.`;
   const [y, m, dd] = days[0].day.split('-').map(Number);
   $('axis-start').textContent = new Date(y, m - 1, dd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// The 24 hours side by side, and the three in a row that got the most clicks: that's when
+// the people who click it are around, so it's when to post it again.
+function drawHours(hours) {
+  const max = Math.max(1, ...hours);
+  $('hours').replaceChildren(...hours.map((n, h) => {
+    const li = el('li', { title: `${h}h: ${n} click${n === 1 ? '' : 's'}` },
+      el('span', { class: 'sr-only' }, `${h}h, ${n} click${n === 1 ? '' : 's'}`));
+    li.style.setProperty('--h', `${n ? Math.max(6, (100 * n) / max) : 3}%`);
+    if (!n) li.className = 'zero';
+    return li;
+  }));
+  const total = hours.reduce((s, n) => s + n, 0);
+  let best = 0;
+  for (let h = 1; h < 24; h++) {
+    const sum = (start) => hours[start] + hours[(start + 1) % 24] + hours[(start + 2) % 24];
+    if (sum(h) > sum(best)) best = h;
+  }
+  const window3 = hours[best] + hours[(best + 1) % 24] + hours[(best + 2) % 24];
+  $('hours-note').textContent = total < 5
+    ? '· a few more clicks and it shows the busy hours'
+    : `· ${Math.round((100 * window3) / total)}% of the clicks come between ${best}h and ${(best + 3) % 24}h`;
 }
 
 function bars(id, rows, label) {
