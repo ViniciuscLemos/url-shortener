@@ -212,6 +212,16 @@ describe('making links', () => {
     expect(qr.headers['content-type']).toContain('image/svg+xml');
     expect(qr.body).toMatch(/^<svg[\s\S]*<path/);
     expect((await app.inject({ method: 'GET', url: '/api/links/nope123/qr.svg' })).statusCode).toBe(404);
+    // a brand color, a PNG at the size asked for, and colors too light to scan refused
+    const green = await app.inject({ method: 'GET', url: `/api/links/${code}/qr.svg?color=1a6b4c` });
+    expect(green.body).toContain('#1a6b4c');
+    const png = await app.inject({ method: 'GET', url: `/api/links/${code}/qr.png?size=300` });
+    expect(png.headers['content-type']).toBe('image/png');
+    expect(png.rawPayload.subarray(1, 4).toString()).toBe('PNG');
+    expect(png.rawPayload.readUInt32BE(16)).toBe(300);
+    expect((await app.inject({ method: 'GET', url: `/api/links/${code}/qr.svg?color=ffee88` })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `/api/links/${code}/qr.svg?color=red` })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'GET', url: `/api/links/${code}/qr.gif` })).statusCode).toBe(404);
   });
 
   it('health and the examples of the demo', async () => {

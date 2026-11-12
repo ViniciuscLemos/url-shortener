@@ -6,7 +6,7 @@ import QRCode from 'qrcode';
 import type pg from 'pg';
 import { ClickQueue, browserOf, deviceOf, isBot, referrerOf } from './clicks.ts';
 import { RateLimit } from './limits.ts';
-import { checkAlias, checkExpiry, checkUrl, randomCode } from './links.ts';
+import { checkAlias, checkExpiry, checkUrl, qrColor, randomCode } from './links.ts';
 import { DEMO_LINKS } from './demo.ts';
 import { newOwnerToken, ownerMatches } from './owner.ts';
 import { linkStats } from './stats.ts';
@@ -241,15 +241,23 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
   });
 
   // a QR code of the short link, for a poster or a menu on the table. The short link is
-  // what goes in it, so the clicks from the QR are counted too
-  app.get<{ Params: { code: string } }>('/api/links/:code/qr.svg', async (req, reply) => {
-    const { rows } = await pool.query<{ code: string }>('SELECT code FROM links WHERE code = $1', [req.params.code.toLowerCase()]);
-    if (!rows[0]) return reply.code(404).send({ error: 'No short link with this name.' });
-    const svg = await QRCode.toString(`${baseUrl}/${rows[0].code}`, {
-      type: 'svg', margin: 2, errorCorrectionLevel: 'M', color: { dark: '#161513', light: '#ffffff' },
+  // what goes in it, so the clicks from the QR are counted too. ?color= paints it in a brand
+  // color (refused when it's too light to scan), and .png comes at the size asked for
+  app.get<{ Params: { code: string; kind: string }; Querystring: { color?: string; size?: string } }>(
+    '/api/links/:code/qr.:kind', async (req, reply) => {
+      const kind = req.params.kind;
+      if (kind !== 'svg' && kind !== 'png') return reply.code(404).send({ error: 'QR codes come as .svg or .png.' });
+      const { rows } = await pool.query<{ code: string }>('SELECT code FROM links WHERE code = $1', [req.params.code.toLowerCase()]);
+      if (!rows[0]) return reply.code(404).send({ error: 'No short link with this name.' });
+      const color = qrColor(req.query.color);
+      if (!color.ok) return reply.code(400).send({ error: color.error });
+      const options = { margin: 2, errorCorrectionLevel: 'M' as const, color: { dark: color.value, light: '#ffffff' } };
+      const url = `${baseUrl}/${rows[0].code}`;
+      reply.header('Cache-Control', 'public, max-age=86400');
+      if (kind === 'svg') return reply.type('image/svg+xml').send(await QRCode.toString(url, { ...options, type: 'svg' }));
+      const size = Math.min(2048, Math.max(128, Number(req.query.size) || 1024));
+      return reply.type('image/png').send(await QRCode.toBuffer(url, { ...options, type: 'png', width: size }));
     });
-    return reply.type('image/svg+xml').header('Cache-Control', 'public, max-age=86400').send(svg);
-  });
 
   app.get<{ Params: { code: string } }>('/:code', async (req, reply) => {
     const code = req.params.code.toLowerCase();

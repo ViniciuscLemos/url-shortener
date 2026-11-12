@@ -65,3 +65,20 @@ export function checkExpiry(value: unknown, now = new Date()): { ok: true; value
   if (at.getTime() - now.getTime() > MAX_AHEAD) return { ok: false, error: 'The end date can be at most two years ahead.' };
   return { ok: true, value: at };
 }
+
+// The color of a QR code: six hex digits, dark enough against white for a phone camera to
+// read it. The contrast is the WCAG formula; 4.5 is the line for text, and cameras are
+// pickier than eyes about light colors, so the same line holds here.
+export function qrColor(value: string | undefined): { ok: true; value: string } | { ok: false; error: string } {
+  if (!value) return { ok: true, value: '#161513' };
+  const hex = value.replace(/^#/, '').toLowerCase();
+  if (!/^[0-9a-f]{6}$/.test(hex)) return { ok: false, error: 'The color looks like 1a6b4c (six hex digits).' };
+  const channel = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const light = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  const contrast = 1.05 / (light + 0.05);
+  if (contrast < 4.5) return { ok: false, error: 'That color is too light: a phone camera may not read it on white.' };
+  return { ok: true, value: `#${hex}` };
+}
