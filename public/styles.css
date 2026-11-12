@@ -177,3 +177,5 @@ tr.is-off .code { text-decoration: line-through; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+.noscript { max-width: 560px; margin: 40px auto; padding: 14px 18px; border-left: 3px solid currentColor; font: 16px/1.5 system-ui, sans-serif; }
