@@ -35,6 +35,9 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **Hot links skip the database.** The last 1000 links used stay in memory, so a popular link is answered without a query.
 - **Only people count.** WhatsApp, Slack, Telegram and the like open the link to draw the preview card. That isn't a click, so user agents of bots, previews and scripts are left out. From each click it keeps the day, the site it came from (just `instagram.com`, not the whole address), the kind of device and the browser. No IP.
 - **The stats.** Clicks per day for the last 30 days in the São Paulo timezone (a click at 23:30 there is already the next day in UTC), with `generate_series` filling the days without clicks so the chart has no holes. Every query goes through the `(link_id, clicked_at)` index and only reads that link's rows in that window. The total is a column updated with each batch, so it never needs a `COUNT(*)` over everything. The chart doesn't count clicks either: each batch also adds to a `link_days` table (one row per link per day, an `INSERT ... ON CONFLICT DO UPDATE`), and the 30 days are 30 small rows from there. A link with a million clicks draws as fast as one with ten.
+- **When in the day.** The 24 hours side by side, in the same timezone, and a line on the three hours in a row that got the most clicks (*"26% of the clicks come between 19h and 22h"*): that's when the people who click are around, so it's when to post the link again. With fewer than five clicks it doesn't pretend to know.
+
+  <img src="docs/hours.png" alt="Clicks per day for the last 30 days, and below it the 24 hours of the day with most clicks between 19h and 22h" width="640">
 
 Works on a phone and follows the system's dark mode:
 
