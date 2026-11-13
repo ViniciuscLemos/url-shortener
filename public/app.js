@@ -93,7 +93,7 @@ $('shorten').addEventListener('submit', async (event) => {
     const link = await api('/api/links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: withUtm($('url').value), alias: $('alias').value, expiresAt: $('ends').value || undefined }),
+      body: JSON.stringify({ url: withUtm($('url').value), alias: $('alias').value, expiresAt: $('ends').value || undefined, password: $('pass').value || undefined }),
     });
     // the owner token comes only in this answer: it's what lets this browser change the link later
     save([{ code: link.code, url: link.url, createdAt: link.createdAt, token: link.ownerToken },
@@ -102,6 +102,7 @@ $('shorten').addEventListener('submit', async (event) => {
     $('url').value = '';
     $('alias').value = '';
     $('ends').value = '';
+    $('pass').value = '';
     renderLinks();
   } catch (err) {
     error.textContent = err.message;
@@ -171,7 +172,8 @@ async function renderLinks() {
       continue;
     }
     clicks.replaceChildren(week(data.week), el('span', {}, data.clicks.toLocaleString('en-US')));
-    row.children[1].textContent = plain(data.url);
+    // a link behind a password doesn't say where it goes in this list; the address kept here does
+    row.children[1].textContent = plain(data.url ?? link.url);
     if (data.disabled) row.children[3].textContent = 'turned off';
     else if (data.expired) row.children[3].textContent = 'ended';
     row.classList.toggle('is-off', data.disabled || data.expired);
@@ -198,13 +200,15 @@ async function openStats(code) {
   for (const tr of $('links').children) tr.setAttribute('aria-selected', String(tr.dataset.code === code));
   let data;
   try {
-    data = await api(`/api/links/${code}`);
+    // with the token, a link behind a password still shows its owner where it goes
+    const token = tokenOf(code);
+    data = await api(`/api/links/${code}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
   } catch (err) {
     return;
   }
   const { stats } = data;
   $('stats-title').textContent = `${host}/${data.code}`;
-  $('stats-dest').textContent = `→ ${data.url}`;
+  $('stats-dest').textContent = data.url ? `→ ${data.url}` : '→ behind a password';
   showOwner(data);
   setQr($('stats-qr'), data.code, qrColorPicked());
   $('stats-total').textContent = stats.total.toLocaleString('en-US');
@@ -345,7 +349,12 @@ function showOwner(data) {
       ? `Ended on ${when}: people who open it see a "this link has ended" page.`
       : `Works until the end of ${when}, then it stops on its own.`;
   }
-  $('new-url').value = data.url;
+  $('new-url').value = data.url ?? '';
+  $('stats-locked').hidden = !data.locked;
+  $('owner-pass').value = '';
+  $('owner-pass').placeholder = data.locked ? 'a new one' : '';
+  $('pass-save').textContent = data.locked ? 'change' : 'set';
+  $('pass-clear').hidden = !data.locked;
   $('toggle-off').textContent = data.disabled ? 'Turn it back on' : 'Turn off';
 }
 
@@ -368,6 +377,12 @@ async function change(body) {
     error.hidden = false;
   }
 }
+
+$('pass-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if ($('owner-pass').value) change({ password: $('owner-pass').value });
+});
+$('pass-clear').addEventListener('click', () => change({ password: null }));
 
 $('redirect-form').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -438,3 +453,58 @@ for (const id of ['ends', 'owner-ends']) $(id).min = localDay(new Date().toISOSt
 
 let examples = [];
 api('/api/config').then((config) => { examples = config.examples; }).catch(() => {}).finally(renderLinks);
+
+// many links at once: a list pasted or a CSV opened, each line made or refused on its own
+let bulkMade = [];
+
+$('bulk-file').addEventListener('change', async () => {
+  const file = $('bulk-file').files[0];
+  if (!file) return;
+  $('bulk-text').value = (await file.text()).trim();
+  $('bulk-file').value = '';
+  $('bulk-text').focus();
+});
+
+$('bulk-go').addEventListener('click', async () => {
+  const error = $('bulk-error');
+  const button = $('bulk-go');
+  error.hidden = true;
+  button.disabled = true;
+  try {
+    const { made, links } = await api('/api/links/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: $('bulk-text').value }),
+    });
+    bulkMade = links.filter((l) => l.ok);
+    // newest on top of "your links", with their tokens, the same as one made by hand
+    const fresh = bulkMade.map((l) => ({ code: l.code, url: l.url, createdAt: l.createdAt, token: l.ownerToken }));
+    save([...fresh.reverse(), ...saved().filter((l) => !fresh.some((f) => f.code === l.code))]);
+    const refused = links.length - made;
+    $('bulk-summary').textContent = `${made} made${refused ? `, ${refused} not (see why below)` : ''}.`;
+    $('bulk-list').replaceChildren(...links.map((l) => el('li', { class: l.ok ? '' : 'is-refused' },
+      el('span', { class: 'bulk-line' }, `line ${l.line}`),
+      l.ok ? el('a', { class: 'code', href: l.shortUrl, target: '_blank', rel: 'noopener' }, plain(l.shortUrl)) : el('span', { class: 'bulk-input' }, l.input),
+      el('span', { class: 'bulk-note' }, l.ok ? `→ ${l.url}` : l.error))));
+    $('bulk-csv').hidden = !made;
+    $('bulk-result').hidden = false;
+    // what worked leaves the box; what didn't stays, to fix and send again
+    const lines = $('bulk-text').value.split(/\r?\n/);
+    const failed = new Set(links.filter((l) => !l.ok).map((l) => l.line));
+    $('bulk-text').value = lines.filter((_, i) => failed.has(i + 1)).join('\n');
+    renderLinks();
+  } catch (err) {
+    error.textContent = err.message;
+    error.hidden = false;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('bulk-csv').addEventListener('click', () => {
+  const cell = (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const csv = ['short link,goes to', ...bulkMade.map((l) => [l.shortUrl, l.url].map(cell).join(','))].join('\r\n');
+  const a = el('a', { href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })), download: 'short-links.csv' });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});

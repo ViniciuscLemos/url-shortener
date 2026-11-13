@@ -40,7 +40,13 @@ Work in progress. What works: making links (random or with a custom name), the r
 - **QR code.** Every link has one (`/api/links/{code}/qr.svg`), for a poster or the menu on a restaurant table. It holds the short link, not the long one, so the scans are counted like any other click. It can take a brand color (`?color=1a6b4c`): five scan-safe ones to pick in the stats, and any other through the API as long as it's dark enough for a phone camera on white (the same 4.5:1 contrast formula used for text; a light yellow gets a 400 instead of a QR nobody can read). There's a PNG at the size a print shop asks for (`qr.png?size=1200`, from 128 to 2048) next to the SVG.
 
   <img src="docs/qr-color.png" alt="The stats of a link with its QR code in green, five color swatches under it and a 'PNG for print' link" width="640">
-- **Hot links skip the database.** The last 1000 links used stay in memory, so a popular link is answered without a query.
+- **A password on a link.** For the proposal sent to one client, or the form only the team should open. The link asks for the password on a plain HTML form (it works without JavaScript) and only then goes on, with a `303` so going back doesn't send the form again. The click counts once it's opened, and the page carries along where the visit came from, so the numbers still say Instagram and not the password page itself. Where it goes isn't shown to anyone else: not in the `+` preview, not in the public numbers, only to the browser holding the owner token. The password is kept as a salted scrypt hash. Ten wrong tries from the same IP on the same link and it has to wait 10 minutes. The owner can change it or take it off later.
+
+  <img src="docs/password.png" alt="The page a link with a password opens: this link asks for a password, the field, an Open button and 'That's not the password' in red" width="520">
+- **Many links at once.** *Many links at once* takes a list pasted, or a CSV out of a spreadsheet: one link per line, a name after a comma. A semicolon or a tab work too, since that's how Excel in Portuguese and a copied column come out, and a first line of headings is skipped. Each line is made or refused on its own, so a typo on line 12 doesn't stop the other 49, and the page says which and why. What worked goes to *your links* with its own owner token, and the short links download as a CSV to paste back in the spreadsheet. Up to 50 per list, three lists every 10 minutes per IP.
+
+  <img src="docs/bulk.png" alt="A list of five links sent at once: two made, one name already taken, one line that isn't a link, each with its line number" width="620">
+- **Hot links skip the database. The last 1000 links used stay in memory, so a popular link is answered without a query.
 - **Only people count.** WhatsApp, Slack, Telegram and the like open the link to draw the preview card. That isn't a click, so user agents of bots, previews and scripts are left out. From each click it keeps the day, the site it came from (just `instagram.com`, not the whole address), the kind of device and the browser. No IP.
 - **The stats.** Clicks per day for the last 30 days in the São Paulo timezone (a click at 23:30 there is already the next day in UTC), with `generate_series` filling the days without clicks so the chart has no holes. Every query goes through the `(link_id, clicked_at)` index and only reads that link's rows in that window. The total is a column updated with each batch, so it never needs a `COUNT(*)` over everything. The chart doesn't count clicks either: each batch also adds to a `link_days` table (one row per link per day, an `INSERT ... ON CONFLICT DO UPDATE`), and the 30 days are 30 small rows from there. A link with a million clicks draws as fast as one with ten.
 - **When in the day.** The 24 hours side by side, in the same timezone, and a line on the three hours in a row that got the most clicks (*"26% of the clicks come between 19h and 22h"*): that's when the people who click are around, so it's when to post the link again. With fewer than five clicks it doesn't pretend to know.
@@ -65,16 +71,18 @@ Works on a phone and follows the system's dark mode:
 
 | | |
 |---|---|
-| `POST /api/links` | `{"url": "...", "alias": "optional", "expiresAt": "optional, 2026-12-01"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
-| `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}`, `{"disabled": true}` or `{"expiresAt": "..." / null}` → the link; 403 without the right token |
+| `POST /api/links` | `{"url": "...", "alias": "optional", "expiresAt": "optional, 2026-12-01", "password": "optional"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
+| `POST /api/links/bulk` | `{"text": "one link per line, a name after a comma"}` → `made` and each line with its link and `ownerToken`, or why not |
+| `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}`, `{"disabled": true}`, `{"expiresAt": "..." / null}` or `{"password": "..." / null}` → the link; 403 without the right token |
 | `GET /api/links/{code}/clicks.csv` | same token → every click as CSV |
 | `DELETE /api/links/{code}` | same token → 204, the link and its clicks are gone |
 | `GET /api/links?codes=a,b,c` | up to 50 links at once, each with its total and `week` (clicks on each of the last 7 days); unknown codes are left out |
-| `GET /api/links/{code}` | the link, its total and the stats (`?days=` up to 90) |
+| `GET /api/links/{code}` | the link, its total and the stats (`?days=` up to 90); `url` is null for a link with a password, unless the owner token comes along |
 | `GET /api/links/{code}/qr.svg` | the QR code of the short link; `?color=` for a brand color |
 | `GET /api/links/{code}/qr.png?size=1200` | the same as PNG, 128 to 2048 pixels |
 | `GET /{code}+` | where the short link goes, without going (no click counted) |
-| `GET /{code}` | the redirect (410 when the link is turned off) |
+| `GET /{code}` | the redirect (410 when the link is turned off), or the password page |
+| `POST /{code}` | the password page's form (`password`) → 303 to the link, 401 when wrong, 429 after ten tries |
 
 ## Running it
 
@@ -118,6 +126,8 @@ The free instance sleeps after 15 minutes without visits, so the first link open
 src/links.ts    codes, custom names and which links are accepted
 src/clicks.ts   who's a person, device, browser, referrer, and the batch queue
 src/stats.ts    the stats queries
+src/password.ts passwords on links (scrypt)
+src/bulk.ts     reading a list or a CSV of links
 src/app.ts      routes (Fastify) and the cache of hot links
 public/         the page, plain HTML, CSS and JS
 ```

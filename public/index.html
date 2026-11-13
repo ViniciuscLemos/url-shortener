@@ -38,6 +38,7 @@
         <label for="alias">Custom name <span class="muted">(optional)</span></label>
         <span class="alias-input"><span class="prefix" id="prefix"></span><input id="alias" name="alias" maxlength="32" autocomplete="off" spellcheck="false" placeholder="black-friday"></span>
         <label class="ends" for="ends">Works until <span class="muted">(optional)</span> <input id="ends" name="ends" type="date"></label>
+        <label class="ends pass" for="pass">Password <span class="muted">(optional)</span> <input id="pass" name="pass" type="password" minlength="4" maxlength="72" autocomplete="new-password" size="12"></label>
       </div>
       <details class="utm" id="utm">
         <summary>Campaign tags <span class="muted">(UTM, for Google Analytics)</span></summary>
@@ -52,6 +53,23 @@
       </details>
       <p class="error" id="error" role="alert" hidden></p>
     </form>
+
+    <details class="bulk" id="bulk">
+      <summary>Many links at once <span class="muted">(a list, or a CSV from a spreadsheet)</span></summary>
+      <label for="bulk-text">One per line: the long link, and a name after a comma if you want one</label>
+      <textarea id="bulk-text" rows="6" spellcheck="false" placeholder="example.com/summer-sale, summer&#10;example.com/menu&#10;example.com/contact, talk-to-us"></textarea>
+      <div class="bulk-actions">
+        <button type="button" class="go" id="bulk-go">Make them</button>
+        <label class="link-plain bulk-file">or open a CSV<input type="file" id="bulk-file" accept=".csv,.txt,text/csv,text/plain" class="sr-only"></label>
+        <span class="muted">up to 50 at a time</span>
+      </div>
+      <p class="error" id="bulk-error" role="alert" hidden></p>
+      <div class="bulk-result" id="bulk-result" hidden>
+        <p id="bulk-summary" aria-live="polite"></p>
+        <ol class="bulk-list" id="bulk-list"></ol>
+        <button type="button" class="ghost small" id="bulk-csv">Download the short links (CSV)</button>
+      </div>
+    </details>
 
     <section class="result" id="result" hidden aria-live="polite">
       <div class="result-main">
@@ -86,6 +104,7 @@
       <p class="dest" id="stats-dest"></p>
       <p class="off-note" id="stats-off" hidden>Turned off: people who open it see a "this link was turned off" page.</p>
       <p class="off-note" id="stats-ends" hidden></p>
+      <p class="off-note is-info" id="stats-locked" hidden>Asks for a password before it goes anywhere.</p>
       <div class="owner" id="owner" hidden>
         <form id="redirect-form" class="redirect-form" novalidate>
           <label for="new-url">Send it somewhere else</label>
@@ -96,6 +115,7 @@
         </form>
         <div class="owner-actions">
           <label class="ends-edit">Works until <input id="owner-ends" type="date"> <button type="button" class="link-plain" id="ends-clear">no end date</button></label>
+          <form class="ends-edit" id="pass-form" novalidate><label for="owner-pass" id="owner-pass-label">Password</label> <input id="owner-pass" type="password" minlength="4" maxlength="72" autocomplete="new-password" size="10"> <button type="submit" class="link-plain" id="pass-save">set</button> <button type="button" class="link-plain" id="pass-clear">take it off</button></form>
           <button type="button" class="ghost small" id="toggle-off">Turn off</button>
           <button type="button" class="link-plain" id="download-csv">Every click (CSV)</button>
           <button type="button" class="link-danger" id="delete-link">Delete for good</button>

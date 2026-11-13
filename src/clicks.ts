@@ -75,12 +75,15 @@ export class ClickQueue {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      // unnest turns the arrays back into rows: the whole batch in a single statement
+      // unnest turns the arrays back into rows: the whole batch in a single statement, in the
+      // order the clicks came (two in the same millisecond still list in the right order)
       await client.query(
         // a link deleted while its clicks waited here is skipped, instead of failing the whole batch
         `INSERT INTO clicks (link_id, clicked_at, referrer, device, browser)
-         SELECT c.* FROM unnest($1::bigint[], $2::timestamptz[], $3::text[], $4::text[], $5::text[]) AS c(link_id, at, r, d, b)
-         WHERE EXISTS (SELECT 1 FROM links l WHERE l.id = c.link_id)`,
+         SELECT c.link_id, c.at, c.r, c.d, c.b
+         FROM unnest($1::bigint[], $2::timestamptz[], $3::text[], $4::text[], $5::text[]) WITH ORDINALITY AS c(link_id, at, r, d, b, n)
+         WHERE EXISTS (SELECT 1 FROM links l WHERE l.id = c.link_id)
+         ORDER BY c.n`,
         [batch.map((c) => c.linkId), batch.map((c) => c.at), batch.map((c) => c.referrer),
           batch.map((c) => c.device), batch.map((c) => c.browser)],
       );

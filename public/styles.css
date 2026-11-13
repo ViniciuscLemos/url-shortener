@@ -211,3 +211,37 @@ tr.is-off .code { text-decoration: line-through; }
 .utm-preview { margin: 10px 0 0; font-family: var(--mono); font-size: 0.8rem; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .utm-fields { grid-template-columns: 1fr; } }
 @media (pointer: coarse) { .utm-fields input { font-size: 16px; } }
+
+/* a password on a link, and the page that asks for it */
+.pass input { width: 9em; }
+.locked h1 { margin-bottom: 6px; }
+.lock-form { margin-top: 24px; max-width: 420px; }
+.lock-form label { display: block; font-weight: 600; margin-bottom: 6px; }
+.lock-row { display: flex; border: 1px solid var(--ink); }
+.lock-row input { flex: 1; min-width: 0; border: 0; padding: 12px; font: inherit; background: var(--panel); color: var(--ink); }
+.lock-row input:focus { outline: 2px solid var(--focus); outline-offset: -2px; }
+.lock-row .go { padding: 0 20px; }
+#pass-form input { width: 8em; }
+
+/* many links at once */
+.bulk { margin-top: 18px; font-size: 0.95rem; }
+.bulk summary { cursor: pointer; font-weight: 600; }
+.bulk label[for="bulk-text"] { display: block; margin: 14px 0 6px; color: var(--muted); }
+.bulk textarea { width: 100%; font: 0.9rem/1.5 var(--mono); padding: 10px 12px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); resize: vertical; }
+.bulk textarea:focus { outline: none; border-color: var(--ink); }
+.bulk-actions { display: flex; align-items: center; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+.bulk-actions .go { padding: 10px 20px; }
+.bulk-file { position: relative; }
+.bulk-file:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.bulk-result { margin-top: 16px; }
+.bulk-result > p { margin: 0 0 8px; font-weight: 600; }
+.bulk-list { list-style: none; margin: 0 0 12px; padding: 0; border-top: 1px solid var(--line); }
+.bulk-list li { display: grid; grid-template-columns: 60px minmax(0, auto) minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.bulk-list .bulk-line { color: var(--muted); font-size: 0.8rem; }
+.bulk-list .code, .bulk-list .bulk-input { font-family: var(--mono); overflow-wrap: anywhere; }
+.bulk-list .bulk-note { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bulk-list .is-refused .bulk-note { color: var(--accent); white-space: normal; }
+@media (max-width: 640px) {
+  .bulk-list li { grid-template-columns: 52px minmax(0, 1fr); }
+  .bulk-list .bulk-note { grid-column: 2; }
+}

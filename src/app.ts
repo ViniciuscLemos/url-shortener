@@ -8,7 +8,9 @@ import { ClickQueue, browserOf, deviceOf, isBot, referrerOf } from './clicks.ts'
 import { RateLimit } from './limits.ts';
 import { checkAlias, checkExpiry, checkUrl, qrColor, randomCode } from './links.ts';
 import { DEMO_LINKS } from './demo.ts';
+import { BULK_MAX, readLines } from './bulk.ts';
 import { newOwnerToken, ownerMatches } from './owner.ts';
+import { checkPassword, hashPassword, passwordMatches } from './password.ts';
 import { linkStats } from './stats.ts';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
@@ -22,6 +24,7 @@ interface Link {
   owner_token_hash: Buffer | null;
   disabled_at: Date | null;
   expires_at: Date | null;
+  password_hash: string | null;
 }
 
 export interface Options {
@@ -32,6 +35,8 @@ export interface Options {
   clickFlushMs?: number;
   /** links one IP can make per 10 minutes (default 20) */
   linksPer10Min?: number;
+  /** lists of many links one IP can send per 10 minutes (default 3, of up to 50 each) */
+  listsPer10Min?: number;
   /** the public demo: the page shows the example links to someone who hasn't made any */
   demo?: boolean;
 }
@@ -40,7 +45,7 @@ export interface Options {
  * The most used links stay in memory, so a redirect usually doesn't touch the database.
  * A Map keeps insertion order: reading an entry moves it to the end, the oldest goes first.
  */
-interface Cached { id: number; url: string; expiresAt: number | null }
+interface Cached { id: number; url: string; expiresAt: number | null; password: string | null }
 
 class RecentLinks {
   private map = new Map<string, Cached>();
@@ -73,11 +78,16 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
   const recent = new RecentLinks();
   // a shortener without a limit turns into a free tool for spam
   const limit = new RateLimit(options.linksPer10Min ?? 20, 10 * 60_000);
+  const lists = new RateLimit(options.listsPer10Min ?? 3, 10 * 60_000);
+  // guessing a link's password: a few tries per IP and link, then wait
+  const tries = new RateLimit(10, 10 * 60_000);
 
-  const view = (link: Link) => ({
+  // a link behind a password doesn't say where it goes, except to whoever made it
+  const view = (link: Link, owner = false) => ({
     code: link.code,
     shortUrl: `${baseUrl}/${link.code}`,
-    url: link.url,
+    url: link.password_hash && !owner ? null : link.url,
+    locked: link.password_hash != null,
     createdAt: link.created_at,
     clicks: Number(link.clicks),
     disabled: link.disabled_at != null,
@@ -86,6 +96,25 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
   });
 
   app.register(fastifyStatic, { root: PUBLIC, prefix: '/assets/' });
+  // the password page is a plain HTML form, so it works without JavaScript
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+    done(null, Object.fromEntries(new URLSearchParams(body as string)));
+  });
+
+  // One insert: a name asked for (taken comes back as null), or a random code, tried again
+  // on the rare collision among 34 billion. undefined when no code could be made.
+  async function insertLink(url: string, alias: string | null, expiresAt: Date | null, ownerHash: Buffer, passwordHash: string | null) {
+    for (let attempt = 0; attempt < (alias ? 1 : 5); attempt++) {
+      const { rows } = await pool.query<Link>(
+        `INSERT INTO links (code, url, owner_token_hash, expires_at, password_hash) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (code) DO NOTHING RETURNING *`,
+        [alias ?? randomCode(), url, ownerHash, expiresAt, passwordHash],
+      );
+      if (rows[0]) return rows[0];
+      if (alias) return null;
+    }
+    return undefined;
+  }
   app.get('/', (_req, reply) => reply.sendFile('index.html'));
 
   // for the host's health check and the ping that keeps the free instance awake
@@ -96,7 +125,7 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
 
   app.get('/api/config', async () => ({ examples: options.demo ? DEMO_LINKS.map((l) => l.code) : [] }));
 
-  app.post<{ Body: { url?: unknown; alias?: unknown; expiresAt?: unknown } }>('/api/links', async (req, reply) => {
+  app.post<{ Body: { url?: unknown; alias?: unknown; expiresAt?: unknown; password?: unknown } }>('/api/links', async (req, reply) => {
     const wait = limit.take(req.ip);
     if (wait) {
       const minutes = Math.ceil(wait / 60_000);
@@ -108,28 +137,64 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     if (!url.ok) return reply.code(400).send({ error: url.error });
     const expiry = checkExpiry(body.expiresAt);
     if (!expiry.ok) return reply.code(400).send({ error: expiry.error });
-    const owner = newOwnerToken();
-
+    const password = checkPassword(body.password);
+    if (!password.ok) return reply.code(400).send({ error: password.error });
+    let alias: string | null = null;
     if (typeof body.alias === 'string' && body.alias.trim()) {
-      const alias = checkAlias(body.alias);
-      if (!alias.ok) return reply.code(400).send({ error: alias.error });
-      const { rows } = await pool.query<Link>(
-        'INSERT INTO links (code, url, owner_token_hash, expires_at) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING *',
-        [alias.value, url.value, owner.hash, expiry.value],
-      );
-      if (!rows[0]) return reply.code(409).send({ error: `"${alias.value}" is taken, try another name.` });
-      return reply.code(201).send({ ...view(rows[0]), ownerToken: owner.token });
+      const checked = checkAlias(body.alias);
+      if (!checked.ok) return reply.code(400).send({ error: checked.error });
+      alias = checked.value;
     }
+    const owner = newOwnerToken();
+    const link = await insertLink(url.value, alias, expiry.value, owner.hash, password.value && hashPassword(password.value));
+    if (link === null) return reply.code(409).send({ error: `"${alias}" is taken, try another name.` });
+    if (!link) return reply.code(503).send({ error: 'Could not make a code right now, try again.' });
+    return reply.code(201).send({ ...view(link, true), ownerToken: owner.token });
+  });
 
-    // a collision among 34 billion codes is rare, but it's one line to try again
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const { rows } = await pool.query<Link>(
-        'INSERT INTO links (code, url, owner_token_hash, expires_at) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING *',
-        [randomCode(), url.value, owner.hash, expiry.value],
-      );
-      if (rows[0]) return reply.code(201).send({ ...view(rows[0]), ownerToken: owner.token });
+  // A list of links in one go (a CSV from a spreadsheet, or lines pasted): each line made or
+  // refused on its own, so one bad address doesn't stop the other 49. Each link gets its own
+  // owner token, the same as one made by hand.
+  app.post<{ Body: { text?: unknown; expiresAt?: unknown } }>('/api/links/bulk', async (req, reply) => {
+    const body = req.body ?? {};
+    const lines = readLines(typeof body.text === 'string' ? body.text : '');
+    if (!lines.length) return reply.code(400).send({ error: 'No links in there: one per line, like example.com/page, name' });
+    if (lines.length > BULK_MAX) return reply.code(400).send({ error: `At most ${BULK_MAX} links at a time (this has ${lines.length}).` });
+    const expiry = checkExpiry(body.expiresAt);
+    if (!expiry.ok) return reply.code(400).send({ error: expiry.error });
+    const wait = lists.take(req.ip);
+    if (wait) {
+      const minutes = Math.ceil(wait / 60_000);
+      return reply.code(429).header('Retry-After', Math.ceil(wait / 1000))
+        .send({ error: `That's a lot of lists in a short time. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.` });
     }
-    return reply.code(503).send({ error: 'Could not make a code right now, try again.' });
+    const results = [];
+    const asked = new Set<string>();
+    for (const line of lines) {
+      const url = checkUrl(line.url, ownHost);
+      if (!url.ok) {
+        results.push({ line: line.line, ok: false, input: line.url, error: url.error });
+        continue;
+      }
+      let alias: string | null = null;
+      if (line.alias) {
+        const checked = checkAlias(line.alias);
+        if (!checked.ok || asked.has(checked.value)) {
+          results.push({ line: line.line, ok: false, input: line.url, error: checked.ok ? `"${checked.value}" is twice in the list.` : checked.error });
+          continue;
+        }
+        alias = checked.value;
+        asked.add(alias);
+      }
+      const owner = newOwnerToken();
+      const link = await insertLink(url.value, alias, expiry.value, owner.hash, null);
+      if (!link) {
+        results.push({ line: line.line, ok: false, input: line.url, error: link === null ? `"${alias}" is taken.` : 'Could not make a code, try again.' });
+        continue;
+      }
+      results.push({ line: line.line, ok: true, ...view(link, true), ownerToken: owner.token });
+    }
+    return { made: results.filter((r) => r.ok).length, links: results };
   });
 
   // The list of "your links" in one request instead of one per link: clicks so far and the
@@ -160,12 +225,12 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     await clicks.flush();
     const fresh = (await pool.query<Link>('SELECT * FROM links WHERE id = $1', [link.id])).rows[0]!;
     const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 90);
-    return { ...view(fresh), stats: await linkStats(pool, fresh.id, Number(fresh.clicks), days, options.timezone) };
+    return { ...view(fresh, ownerMatches(req.headers.authorization, fresh.owner_token_hash)), stats: await linkStats(pool, fresh.id, Number(fresh.clicks), days, options.timezone) };
   });
 
   // Change where a link goes, or turn it off and on. Only with the token given when it was
   // made: there are no accounts, the browser that made the link is the owner.
-  app.patch<{ Params: { code: string }; Body: { url?: unknown; disabled?: unknown; expiresAt?: unknown } }>('/api/links/:code', async (req, reply) => {
+  app.patch<{ Params: { code: string }; Body: { url?: unknown; disabled?: unknown; expiresAt?: unknown; password?: unknown } }>('/api/links/:code', async (req, reply) => {
     const code = req.params.code.toLowerCase();
     const { rows } = await pool.query<Link>('SELECT * FROM links WHERE code = $1', [code]);
     const link = rows[0];
@@ -191,12 +256,19 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
       if (!expiry.ok) return reply.code(400).send({ error: expiry.error });
       expiresAt = expiry.value;
     }
+    // a new password replaces the old one; null takes it off
+    let passwordHash = link.password_hash;
+    if (body.password !== undefined) {
+      const password = checkPassword(body.password);
+      if (!password.ok) return reply.code(400).send({ error: password.error });
+      passwordHash = password.value && hashPassword(password.value);
+    }
     const updated = (await pool.query<Link>(
-      'UPDATE links SET url = $1, disabled_at = $2, expires_at = $3 WHERE id = $4 RETURNING *',
-      [target, disabledAt, expiresAt, link.id])).rows[0]!;
+      'UPDATE links SET url = $1, disabled_at = $2, expires_at = $3, password_hash = $4 WHERE id = $5 RETURNING *',
+      [target, disabledAt, expiresAt, passwordHash, link.id])).rows[0]!;
     // the copy in memory would keep sending people to the old address
     recent.forget(code);
-    return view(updated);
+    return view(updated, true);
   });
 
   // Every click of a link as a CSV, to open in a spreadsheet: when (in the stats timezone),
@@ -213,7 +285,7 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
     await clicks.flush();
     const list = await pool.query<{ at: string; referrer: string | null; device: string; browser: string }>(
       `SELECT to_char(clicked_at AT TIME ZONE $2, 'YYYY-MM-DD HH24:MI:SS') AS at, referrer, device, browser
-       FROM clicks WHERE link_id = $1 ORDER BY clicked_at`,
+       FROM clicks WHERE link_id = $1 ORDER BY clicked_at, id`,
       [link.id, options.timezone ?? 'America/Sao_Paulo'],
     );
     const lines = ['time,from,device,browser', ...list.rows.map((r) =>
@@ -261,32 +333,64 @@ export function buildApp(options: Options): FastifyInstance & { clicks: ClickQue
 
   // a + at the end (trail.app/abc+) shows where the link goes instead of going there, for
   // whoever wants to look before clicking. No click is counted
-  app.get<{ Params: { code: string } }>('/:code', async (req, reply) => {
-    const preview = req.params.code.endsWith('+');
-    const code = (preview ? req.params.code.slice(0, -1) : req.params.code).toLowerCase();
+  // the link behind a code, or the page to answer instead (not there, off, ended)
+  async function lookUp(code: string): Promise<Cached | { status: number; page: string }> {
     let link = recent.get(code);
     if (!link) {
-      const { rows } = await pool.query<{ id: string; url: string; disabled_at: Date | null; expires_at: Date | null }>(
-        'SELECT id, url, disabled_at, expires_at FROM links WHERE code = $1', [code]);
-      if (!rows[0]) return reply.code(404).type('text/html').send(notFoundPage(baseUrl));
+      const { rows } = await pool.query<{ id: string; url: string; disabled_at: Date | null; expires_at: Date | null; password_hash: string | null }>(
+        'SELECT id, url, disabled_at, expires_at, password_hash FROM links WHERE code = $1', [code]);
+      if (!rows[0]) return { status: 404, page: notFoundPage(baseUrl) };
       // turned off: 410 Gone, and not kept in memory, so turning it back on works right away
-      if (rows[0].disabled_at) return reply.code(410).type('text/html').send(offPage(baseUrl));
-      link = { id: Number(rows[0].id), url: rows[0].url, expiresAt: rows[0].expires_at?.getTime() ?? null };
+      if (rows[0].disabled_at) return { status: 410, page: offPage(baseUrl) };
+      link = { id: Number(rows[0].id), url: rows[0].url, expiresAt: rows[0].expires_at?.getTime() ?? null, password: rows[0].password_hash };
       recent.set(code, link);
     }
     // past its end date: gone, and no click counted. The copy in memory knows the date too
-    if (link.expiresAt != null && Date.now() >= link.expiresAt) {
-      return reply.code(410).type('text/html').send(expiredPage(baseUrl));
-    }
-    if (preview) return reply.type('text/html').header('Cache-Control', 'private, max-age=0').send(previewPage(baseUrl, code, link.url));
+    if (link.expiresAt != null && Date.now() >= link.expiresAt) return { status: 410, page: expiredPage(baseUrl) };
+    return link;
+  }
 
-    const ua = req.headers['user-agent'];
+  const count = (link: Cached, ua: string | undefined, referer: string | undefined) => {
     if (!isBot(ua)) {
-      clicks.add({ linkId: link.id, at: new Date(), referrer: referrerOf(req.headers.referer), device: deviceOf(ua!), browser: browserOf(ua!) });
+      clicks.add({ linkId: link.id, at: new Date(), referrer: referrerOf(referer), device: deviceOf(ua!), browser: browserOf(ua!) });
     }
+  };
+
+  app.get<{ Params: { code: string } }>('/:code', async (req, reply) => {
+    const preview = req.params.code.endsWith('+');
+    const code = (preview ? req.params.code.slice(0, -1) : req.params.code).toLowerCase();
+    const link = await lookUp(code);
+    if ('page' in link) return reply.code(link.status).type('text/html').send(link.page);
+    reply.header('Cache-Control', 'private, max-age=0');
+    // behind a password: the form, and the click counts once it's opened. The page carries
+    // where the visit came from, so the numbers still say Instagram and not "this site"
+    if (link.password) {
+      if (preview) return reply.type('text/html').send(lockedPreviewPage(baseUrl, code));
+      return reply.type('text/html').send(passwordPage(baseUrl, code, req.headers.referer ?? ''));
+    }
+    if (preview) return reply.type('text/html').send(previewPage(baseUrl, code, link.url));
+    count(link, req.headers['user-agent'], req.headers.referer);
     // 302 and not 301: a browser keeps a 301 forever and stops asking, so later clicks
     // wouldn't be counted (and the link could never point somewhere else)
-    return reply.header('Cache-Control', 'private, max-age=0').redirect(link.url, 302);
+    return reply.redirect(link.url, 302);
+  });
+
+  app.post<{ Params: { code: string }; Body: { password?: string; from?: string } }>('/:code', async (req, reply) => {
+    const code = req.params.code.toLowerCase();
+    const link = await lookUp(code);
+    if ('page' in link) return reply.code(link.status).type('text/html').send(link.page);
+    if (!link.password) return reply.redirect(`/${code}`, 303);
+    const from = req.body?.from ?? '';
+    reply.header('Cache-Control', 'no-store');
+    if (tries.take(`${req.ip} ${code}`)) {
+      return reply.code(429).type('text/html').send(passwordPage(baseUrl, code, from, 'Too many tries. Wait a few minutes and try again.'));
+    }
+    if (!passwordMatches(req.body?.password, link.password)) {
+      return reply.code(401).type('text/html').send(passwordPage(baseUrl, code, from, "That's not the password."));
+    }
+    count(link, req.headers['user-agent'], from || undefined);
+    // 303: the browser follows it with a GET, and going back doesn't send the form again
+    return reply.redirect(link.url, 303);
   });
 
   app.addHook('onClose', async () => {
@@ -325,6 +429,29 @@ function offPage(baseUrl: string): string {
 }
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+function passwordPage(baseUrl: string, code: string, from: string, error = ''): string {
+  const shortHost = new URL(baseUrl).host;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>${escapeHtml(shortHost)}/${escapeHtml(code)} asks for a password</title><link rel="stylesheet" href="/assets/styles.css"></head>
+<body><main class="wrap missing locked"><p class="kicker">${escapeHtml(shortHost)}/${escapeHtml(code)}</p>
+<h1>This link asks for a password.</h1><p class="muted">Whoever sent it to you should have it too.</p>
+<form method="post" action="/${escapeHtml(code)}" class="lock-form">
+<label for="password">Password</label>
+<span class="lock-row"><input id="password" name="password" type="password" required autofocus autocomplete="off"${error ? ' aria-invalid="true" aria-describedby="lock-error"' : ''}>
+<button type="submit" class="go">Open</button></span>
+<input type="hidden" name="from" value="${escapeHtml(from)}">
+${error ? `<p class="error" id="lock-error" role="alert">${escapeHtml(error)}</p>` : ''}
+</form></main></body></html>`;
+}
+
+function lockedPreviewPage(baseUrl: string, code: string): string {
+  const shortHost = new URL(baseUrl).host;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Where ${escapeHtml(shortHost)}/${escapeHtml(code)} goes</title><link rel="stylesheet" href="/assets/styles.css"></head>
+<body><main class="wrap missing preview"><p class="kicker">${escapeHtml(shortHost)}/${escapeHtml(code)}</p>
+<h1>Behind a password.</h1><p>Where it goes is only shown once the password is in. <a href="/${escapeHtml(code)}">Open it</a></p></main></body></html>`;
+}
 
 function previewPage(baseUrl: string, code: string, url: string): string {
   const host = new URL(url).hostname.replace(/^www\./, '');

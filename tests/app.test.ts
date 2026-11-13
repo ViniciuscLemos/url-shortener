@@ -2,7 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.ts';
 import { browserOf, deviceOf, isBot, referrerOf } from '../src/clicks.ts';
 import { RateLimit } from '../src/limits.ts';
+import { readLines } from '../src/bulk.ts';
 import { checkAlias, checkUrl, randomCode } from '../src/links.ts';
+import { hashPassword, passwordMatches } from '../src/password.ts';
 import { startDatabase } from './db.ts';
 
 const BASE = 'http://sho.rt';
@@ -245,6 +247,92 @@ describe('making links', () => {
     expect((await visit('nothere+')).statusCode).toBe(404);
     await app.clicks.flush();
     expect((await app.inject({ method: 'GET', url: `/api/links/${code}` })).json().clicks).toBe(0);
+  });
+
+  it('a link behind a password asks for it, and only then goes and counts', async () => {
+    const made = (await shorten({ url: 'https://files.example.com/proposal.pdf', alias: 'proposal', password: 'north42' })).json();
+    expect(made.locked).toBe(true);
+    // whoever made it sees where it goes; anyone else reading it doesn't
+    expect(made.url).toBe('https://files.example.com/proposal.pdf');
+    expect((await app.inject({ method: 'GET', url: '/api/links/proposal' })).json().url).toBeNull();
+    expect((await app.inject({ method: 'GET', url: '/api/links/proposal', headers: { authorization: `Bearer ${made.ownerToken}` } })).json().url)
+      .toBe('https://files.example.com/proposal.pdf');
+
+    const page = await visit('proposal', { 'user-agent': CHROME_PHONE, referer: 'https://www.instagram.com/' });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('asks for a password');
+    expect(page.body).toContain('value="https://www.instagram.com/"');
+    expect(page.body).not.toContain('files.example.com');
+    expect((await visit('proposal+')).body).not.toContain('files.example.com');
+
+    const open = (password: string) => app.inject({
+      method: 'POST', url: '/proposal', headers: { 'user-agent': CHROME_PHONE, 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({ password, from: 'https://www.instagram.com/' }).toString(),
+    });
+    const wrong = await open('south42');
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.body).toContain('not the password');
+    const right = await open('north42');
+    expect(right.statusCode).toBe(303);
+    expect(right.headers.location).toBe('https://files.example.com/proposal.pdf');
+    await app.clicks.flush();
+    const stats = (await app.inject({ method: 'GET', url: '/api/links/proposal' })).json();
+    expect(stats.clicks).toBe(1);
+    expect(stats.stats.referrers[0].name).toBe('instagram.com');
+
+    // taking the password off makes it a plain link again
+    const change = await app.inject({ method: 'PATCH', url: '/api/links/proposal', payload: { password: null }, headers: { authorization: `Bearer ${made.ownerToken}` } });
+    expect(change.json().locked).toBe(false);
+    expect((await visit('proposal')).statusCode).toBe(302);
+    expect((await shorten({ url: 'https://example.com', password: 'abc' })).statusCode).toBe(400);
+  });
+
+  it('a password can only be guessed a few times', async () => {
+    await shorten({ url: 'https://example.com/secret', alias: 'vault', password: 'right-one' });
+    const guess = (password: string) => app.inject({
+      method: 'POST', url: '/vault', remoteAddress: '10.9.9.9',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: `password=${password}`,
+    });
+    for (let i = 0; i < 10; i++) expect((await guess(`try${i}`)).statusCode).toBe(401);
+    // the eleventh is stopped even when it's right
+    expect((await guess('right-one')).statusCode).toBe(429);
+  });
+
+  it('keeps passwords as salted scrypt hashes', () => {
+    const a = hashPassword('north42');
+    expect(a).toMatch(/^scrypt\$/);
+    expect(a).not.toBe(hashPassword('north42'));
+    expect(passwordMatches('north42', a)).toBe(true);
+    expect(passwordMatches('North42', a)).toBe(false);
+    expect(passwordMatches(undefined, a)).toBe(false);
+  });
+
+  it('makes a list of links at once, each line on its own', async () => {
+    await shorten({ url: 'https://example.com', alias: 'taken' });
+    const res = await app.inject({ method: 'POST', url: '/api/links/bulk', payload: {
+      text: 'url,name\nexample.com/summer, summer\nhttps://example.com/menu\nnot a link\nexample.com/x;taken\n\nexample.com/again, summer',
+    } });
+    expect(res.statusCode).toBe(200);
+    const { made, links } = res.json();
+    expect(made).toBe(2);
+    expect(links.map((l: { line: number; ok: boolean }) => [l.line, l.ok])).toEqual([[2, true], [3, true], [4, false], [5, false], [7, false]]);
+    expect(links[0].shortUrl).toBe(`${BASE}/summer`);
+    expect(links[0].ownerToken).toBeTruthy();
+    expect(links[3].error).toContain('taken');
+    expect(links[4].error).toContain('twice');
+    expect((await visit('summer')).headers.location).toBe('https://example.com/summer');
+
+    expect((await app.inject({ method: 'POST', url: '/api/links/bulk', payload: { text: '' } })).statusCode).toBe(400);
+    const tooMany = Array.from({ length: 51 }, (_, i) => `example.com/${i}`).join('\n');
+    expect((await app.inject({ method: 'POST', url: '/api/links/bulk', payload: { text: tooMany } })).json().error).toContain('At most 50');
+  });
+
+  it('reads lists pasted or from a spreadsheet', () => {
+    expect(readLines('Link;Name\n"example.com/a";"a"\nexample.com/b	b\n  \nexample.com/c')).toEqual([
+      { line: 2, url: 'example.com/a', alias: 'a' },
+      { line: 3, url: 'example.com/b', alias: 'b' },
+      { line: 5, url: 'example.com/c', alias: '' },
+    ]);
   });
 
   it('unknown codes get a 404 page', async () => {
