@@ -10,7 +10,12 @@ Try it: **[trail-sfqz.onrender.com](https://trail-sfqz.onrender.com)** (free ins
 
 I wanted something like short.io or Bitly to see how they work inside. Making the short link is the easy part. The interesting parts are the redirect, that has to be fast and can't wait on the database, and counting clicks without counting the wrong things.
 
-Work in progress. What works: making links (random or with a custom name), the redirect, the click counting, the stats page with the hours people click, a QR code for each link in a color of your choice, changing or deleting a link later from the browser that made it, an end date, and every click as a CSV.
+What's there today:
+
+- **Making links:** a random code or a name you pick, campaign tags for Google Analytics, a password or an end date if you want one, or fifty at once from a spreadsheet.
+- **Following them:** clicks per day and per hour, where they came from, phone or computer, which browser, and every click as a CSV.
+- **Sharing them:** a QR code in a brand color, as SVG or a PNG for print, and a `+` at the end of any link to see where it goes before going.
+- **Changing them later** (where it goes, turning it off, deleting it), from the browser that made it, without an account.
 
 ## How it works
 
