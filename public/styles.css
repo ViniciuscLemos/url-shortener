@@ -245,3 +245,10 @@ tr.is-off .code { text-decoration: line-through; }
   .bulk-list li { grid-template-columns: 52px minmax(0, 1fr); }
   .bulk-list .bulk-note { grid-column: 2; }
 }
+
+/* on a phone the short links show just their name: the host is the same on every one */
+@media (max-width: 640px) {
+  .alias-input .host, .links-table .code .host { display: none; }
+  .alias-input .prefix { padding-right: 1px; }
+}
+.bulk summary .muted { font-weight: 400; }

@@ -56,7 +56,8 @@ function ago(iso) {
 
 // make a link
 
-$('prefix').textContent = `${host}/`;
+// on a phone the host is left out (just the /), so the name being typed has the room
+$('prefix').replaceChildren(el('span', { class: 'host' }, host), '/');
 
 // Campaign tags go on the long link before it's shortened, so Google Analytics on the other
 // side knows the visit came from, say, the Instagram bio. Tags already in the link are
@@ -145,7 +146,7 @@ async function renderLinks() {
   const rows = list.map((link) => {
     const clicks = el('td', { class: 'num' }, '…');
     const row = el('tr', { tabindex: '0', 'data-code': link.code },
-      el('td', { class: 'code' }, `${host}/${link.code}`),
+      el('td', { class: 'code' }, el('span', { class: 'host' }, `${host}/`), link.code),
       el('td', { class: 'dest-cell', title: link.url }, plain(link.url)),
       clicks,
       el('td', { class: 'when' }, link.example ? 'example' : ago(link.createdAt)));
