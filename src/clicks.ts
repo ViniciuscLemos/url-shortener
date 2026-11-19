@@ -18,13 +18,16 @@ export function isBot(userAgent: string | undefined): boolean {
 
 export function deviceOf(ua: string): string {
   if (/ipad|tablet/i.test(ua)) return 'tablet';
-  if (/mobi|iphone|android/i.test(ua)) return 'phone';
+  if (/mobi|iphone/i.test(ua)) return 'phone';
+  // Android phones say "Mobile" in the user agent and Android tablets don't
+  if (/android/i.test(ua)) return 'tablet';
   return 'computer';
 }
 
 // the order matters: Edge and Opera also say "Chrome", Chrome also says "Safari"
 export function browserOf(ua: string): string {
-  if (/edg\//i.test(ua)) return 'Edge';
+  // Edge on Android says EdgA/ and on the iPhone EdgiOS/
+  if (/edg(a|ios)?\//i.test(ua)) return 'Edge';
   if (/opr\/|opera/i.test(ua)) return 'Opera';
   if (/samsungbrowser/i.test(ua)) return 'Samsung Internet';
   if (/firefox|fxios/i.test(ua)) return 'Firefox';

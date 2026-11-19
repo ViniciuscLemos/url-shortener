@@ -424,6 +424,10 @@ describe('small pieces', () => {
     expect(browserOf('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/130.0 Safari/537.36 Edg/130.0')).toBe('Edge');
     expect(browserOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1')).toBe('Safari');
     expect(deviceOf('Mozilla/5.0 (iPad; CPU OS 17_0) Safari')).toBe('tablet');
+    expect(deviceOf('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36')).toBe('phone');
+    expect(deviceOf('Mozilla/5.0 (Linux; Android 13; SM-X710) AppleWebKit/537.36 Chrome/130.0 Safari/537.36')).toBe('tablet');
+    expect(browserOf('Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/130.0 Mobile Safari/537.36 EdgA/130.0')).toBe('Edge');
+    expect(browserOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0) AppleWebKit/605.1.15 Version/18.0 EdgiOS/130.0 Mobile/15E148 Safari/605.1.15')).toBe('Edge');
     expect(isBot('Mozilla/5.0 (compatible; Googlebot/2.1)')).toBe(true);
     expect(referrerOf('not a url')).toBeNull();
     expect(referrerOf('https://www.google.com/search?q=x')).toBe('google.com');
