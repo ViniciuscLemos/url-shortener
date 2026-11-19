@@ -33,11 +33,26 @@ export function browserOf(ua: string): string {
   return 'Other';
 }
 
+// links opened from these apps come through their own redirect hosts. Without this the
+// stats split Instagram into l.instagram.com and instagram.com, and X shows up as t.co
+const REDIRECTORS: Record<string, string> = {
+  'l.instagram.com': 'instagram.com',
+  'l.facebook.com': 'facebook.com',
+  'lm.facebook.com': 'facebook.com',
+  'm.facebook.com': 'facebook.com',
+  't.co': 'x.com',
+  'lnkd.in': 'linkedin.com',
+  'out.reddit.com': 'reddit.com',
+  'away.vk.com': 'vk.com',
+  'com.google.android.gm': 'gmail',
+};
+
 /** Just the site that sent the visitor ("instagram.com"), or null when it came straight. */
 export function referrerOf(header: string | undefined): string | null {
   if (!header) return null;
   try {
-    return new URL(header).hostname.replace(/^www\./, '') || null;
+    const host = new URL(header).hostname.replace(/^www\./, '');
+    return REDIRECTORS[host] ?? (host || null);
   } catch {
     return null;
   }

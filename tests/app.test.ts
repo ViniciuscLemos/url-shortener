@@ -427,6 +427,9 @@ describe('small pieces', () => {
     expect(isBot('Mozilla/5.0 (compatible; Googlebot/2.1)')).toBe(true);
     expect(referrerOf('not a url')).toBeNull();
     expect(referrerOf('https://www.google.com/search?q=x')).toBe('google.com');
+    expect(referrerOf('https://l.instagram.com/?u=https%3A%2F%2Fexample.com')).toBe('instagram.com');
+    expect(referrerOf('https://t.co/abc123')).toBe('x.com');
+    expect(referrerOf('android-app://com.google.android.gm/')).toBe('gmail');
   });
 
   it('the limit counts per key and frees up as time passes', () => {
