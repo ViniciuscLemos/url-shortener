@@ -3,7 +3,7 @@ import { buildApp } from '../src/app.ts';
 import { browserOf, deviceOf, isBot, referrerOf } from '../src/clicks.ts';
 import { RateLimit } from '../src/limits.ts';
 import { readLines } from '../src/bulk.ts';
-import { checkAlias, checkUrl, randomCode } from '../src/links.ts';
+import { checkAlias, checkUrl, randomCode, tidyPasted } from '../src/links.ts';
 import { hashPassword, passwordMatches } from '../src/password.ts';
 import { startDatabase } from './db.ts';
 
@@ -451,5 +451,14 @@ describe('small pieces', () => {
     expect(checkUrl('HTTPS://Example.com', 'sho.rt')).toEqual({ ok: true, value: 'https://example.com/' });
     expect(checkUrl('localhost:3000/x', 'sho.rt').ok).toBe(true);
     expect(checkAlias(' Promo ')).toEqual({ ok: true, value: 'promo' });
+  });
+
+  it('drops what a link copied out of a sentence brings along', () => {
+    expect(tidyPasted('https://example.com/page.')).toBe('https://example.com/page');
+    expect(tidyPasted('(https://example.com/page),')).toBe('https://example.com/page');
+    expect(tidyPasted('<https://example.com/a?b=1>')).toBe('https://example.com/a?b=1');
+    expect(tidyPasted('https://en.wikipedia.org/wiki/Java_(programming_language)')).toBe('https://en.wikipedia.org/wiki/Java_(programming_language)');
+    expect(tidyPasted('https://en.wikipedia.org/wiki/Java_(programming_language)).')).toBe('https://en.wikipedia.org/wiki/Java_(programming_language)');
+    expect(checkUrl('"example.com/promo";', 'sho.rt')).toEqual({ ok: true, value: 'https://example.com/promo' });
   });
 });

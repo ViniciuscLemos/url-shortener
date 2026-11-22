@@ -25,8 +25,25 @@ export function checkAlias(text: string): Check<string> {
   return { ok: true, value: alias };
 }
 
+/**
+ * A link copied out of a sentence brings the sentence with it: "see https://x.com/a." or
+ * "(https://x.com/a)" or "<https://x.com/a>" from an email. The dot or bracket at the end
+ * isn't part of the link, unless the link opened that bracket itself (Wikipedia's
+ * "Java_(programming_language)" keeps its ")").
+ */
+export function tidyPasted(text: string): string {
+  // a link never starts with these, so they can only be the sentence around it
+  let raw = text.trim().replace(/^["'<(]+/, '');
+  for (;;) {
+    const last = raw.at(-1);
+    if (last && '.,;:!?\'">'.includes(last)) raw = raw.slice(0, -1);
+    else if (last === ')' && raw.split('(').length < raw.split(')').length) raw = raw.slice(0, -1);
+    else return raw;
+  }
+}
+
 export function checkUrl(text: string, ownHost: string): Check<string> {
-  const raw = text.trim();
+  const raw = tidyPasted(text);
   if (!raw) return { ok: false, error: 'Paste a link to shorten.' };
   if (raw.length > 2048) return { ok: false, error: 'This link is too long (more than 2048 characters).' };
 
