@@ -335,6 +335,16 @@ describe('making links', () => {
     ]);
   });
 
+  it('keeps the commas that belong to the link', () => {
+    expect(readLines('https://example.com/a?ids=1,2,abc\nhttps://maps.example.com/@-23.5,-46.6,15z\nhttps://maps.example.com/@-23.5,-46.6,15z, mapa\nexample.com/b,promo\nexample.com/c,')).toEqual([
+      { line: 1, url: 'https://example.com/a?ids=1,2,abc', alias: '' },
+      { line: 2, url: 'https://maps.example.com/@-23.5,-46.6,15z', alias: '' },
+      { line: 3, url: 'https://maps.example.com/@-23.5,-46.6,15z', alias: 'mapa' },
+      { line: 4, url: 'example.com/b', alias: 'promo' },
+      { line: 5, url: 'example.com/c', alias: '' },
+    ]);
+  });
+
   it('unknown codes get a 404 page', async () => {
     const res = await visit('nothere');
     expect(res.statusCode).toBe(404);
