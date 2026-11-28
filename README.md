@@ -76,7 +76,7 @@ Works on a phone and follows the system's dark mode:
 
 | | |
 |---|---|
-| `POST /api/links` | `{"url": "...", "alias": "optional", "expiresAt": "optional, 2026-12-01", "password": "optional"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
+| `POST /api/links` | `{"url": "...", "alias": "optional, typed freely: Black Friday becomes black-friday", "expiresAt": "optional, 2026-12-01", "password": "optional"}` → the short link (201) with its `ownerToken`, 400 for a bad link or name, 409 for a taken name |
 | `POST /api/links/bulk` | `{"text": "one link per line, a name after a comma"}` → `made` and each line with its link and `ownerToken`, or why not |
 | `PATCH /api/links/{code}` | `Authorization: Bearer <ownerToken>` and `{"url": "..."}`, `{"disabled": true}`, `{"expiresAt": "..." / null}` or `{"password": "..." / null}` → the link; 403 without the right token |
 | `GET /api/links/{code}/clicks.csv` | same token → every click as CSV |

@@ -3,7 +3,7 @@ import { buildApp } from '../src/app.ts';
 import { browserOf, deviceOf, isBot, referrerOf } from '../src/clicks.ts';
 import { RateLimit } from '../src/limits.ts';
 import { readLines } from '../src/bulk.ts';
-import { checkAlias, checkUrl, randomCode, tidyPasted } from '../src/links.ts';
+import { checkAlias, checkUrl, randomCode, tidyAlias, tidyPasted } from '../src/links.ts';
 import { hashPassword, passwordMatches } from '../src/password.ts';
 import { startDatabase } from './db.ts';
 
@@ -190,7 +190,7 @@ describe('making links', () => {
     for (const url of ['javascript:alert(1)', 'data:text/html,hi', 'file:///etc/passwd', `${BASE}/abc`, 'not a link', '']) {
       expect((await shorten({ url })).statusCode, url).toBe(400);
     }
-    for (const alias of ['api', 'ab', 'has space', '-start', 'x'.repeat(33)]) {
+    for (const alias of ['api', 'ab', 'has/slash', '-start', 'x'.repeat(33)]) {
       expect((await shorten({ url: 'https://example.com', alias })).statusCode, alias).toBe(400);
     }
   });
@@ -461,6 +461,16 @@ describe('small pieces', () => {
     expect(checkUrl('HTTPS://Example.com', 'sho.rt')).toEqual({ ok: true, value: 'https://example.com/' });
     expect(checkUrl('localhost:3000/x', 'sho.rt').ok).toBe(true);
     expect(checkAlias(' Promo ')).toEqual({ ok: true, value: 'promo' });
+  });
+
+  it('a custom name typed with spaces or accents becomes a usable one', () => {
+    expect(tidyAlias('Black Friday')).toBe('black-friday');
+    expect(tidyAlias('promoção_natal')).toBe('promocao-natal');
+    expect(tidyAlias('  Café   da  Manhã ')).toBe('cafe-da-manha');
+    expect(checkAlias('Black Friday')).toEqual({ ok: true, value: 'black-friday' });
+    // what's left still has to be a valid name
+    expect(checkAlias('ç').ok).toBe(false);
+    expect(checkAlias('a/b c').ok).toBe(false);
   });
 
   it('drops what a link copied out of a sentence brings along', () => {

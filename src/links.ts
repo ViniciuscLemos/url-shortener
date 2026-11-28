@@ -16,8 +16,23 @@ export function randomCode(): string {
 
 export type Check<T> = { ok: true; value: T } | { ok: false; error: string };
 
+/**
+ * A custom name the way people type it: "Black Friday" or "promoção_natal" become
+ * "black-friday" and "promocao-natal", since a link can't have spaces and an accent in it
+ * turns into %C3%A7 when the link is shared.
+ */
+export function tidyAlias(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/-{2,}/g, '-');
+}
+
 export function checkAlias(text: string): Check<string> {
-  const alias = text.trim().toLowerCase();
+  const alias = tidyAlias(text);
   if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(alias)) {
     return { ok: false, error: 'The custom name needs 3 to 32 letters, numbers or dashes, starting with a letter or number.' };
   }
